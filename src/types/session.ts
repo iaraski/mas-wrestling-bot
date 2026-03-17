@@ -25,6 +25,7 @@ export interface SessionData extends Scenes.WizardSessionData {
   supabaseUserId?: string;
   registration?: RegistrationData;
   passport?: PassportData;
+  isProcessing?: boolean; // Флаг для предотвращения спама по кнопкам
 }
 
 export interface BotContext extends Context {

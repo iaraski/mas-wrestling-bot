@@ -1,6 +1,7 @@
 import { Scenes, Markup } from 'telegraf';
 import { supabase } from '../supabase';
 import { BotContext } from '../types/session';
+import { validators } from '../utils/validation';
 
 export const editPassportScene = new Scenes.WizardScene<BotContext>(
   'edit-passport',
@@ -19,18 +20,27 @@ export const editPassportScene = new Scenes.WizardScene<BotContext>(
   // 2. Обработка выбора и запрос нового значения
   async (ctx) => {
     if (!ctx.callbackQuery || !('data' in ctx.callbackQuery)) return;
-    const action = ctx.callbackQuery.data;
+    const cbQuery = ctx.callbackQuery as any;
+    const action = cbQuery.data;
+    const actionText = cbQuery.message?.reply_markup?.inline_keyboard
+      ?.flat()
+      .find((b: any) => b.callback_data === action)?.text;
+
     await ctx.answerCbQuery();
 
     if (action === 'cancel_edit_passport') {
+      await ctx.editMessageText('Возврат к профилю...').catch(() => {});
       await ctx.scene.enter('edit-profile');
       return;
     }
 
+    // Убираем кнопки выбора поля
+    await ctx.editMessageText(`Выбрано: ${actionText}`).catch(() => {});
+
     (ctx.wizard.state as any).editAction = action;
 
     const prompts: Record<string, string> = {
-      edit_pass_series_number: 'Введите новую серию и номер паспорта:',
+      edit_pass_series_number: 'Введите новую серию и номер паспорта через пробел (например: 1234 567890):',
       edit_pass_issued_by: 'Кем выдан паспорт?:',
       edit_pass_issue_date: 'Введите новую дату выдачи (ДД.ММ.ГГГГ):',
       edit_pass_birth_date: 'Введите новую дату рождения (ДД.ММ.ГГГГ):',
@@ -60,14 +70,22 @@ export const editPassportScene = new Scenes.WizardScene<BotContext>(
         updateData.photo_url = ctx.message.photo[ctx.message.photo.length - 1].file_id;
       } else {
         if (!ctx.message || !('text' in ctx.message)) return;
-        const newValue = ctx.message.text;
+        const newValue = ctx.message.text.trim();
 
         if (action === 'edit_pass_series_number') {
-          const [series, number] = newValue.split(/\s+/);
-          updateData = { series, number };
+          const parts = newValue.split(/\s+/);
+          if (parts.length !== 2 || !validators.passportSeries(parts[0]) || !validators.passportNumber(parts[1])) {
+            await ctx.reply('Пожалуйста, введите серию (4 цифры) и номер (6 цифр) через пробел.');
+            return;
+          }
+          updateData = { series: parts[0], number: parts[1] };
         } else if (action === 'edit_pass_issued_by') {
           updateData.issued_by = newValue;
         } else if (action === 'edit_pass_issue_date' || action === 'edit_pass_birth_date') {
+          if (!validators.date(newValue)) {
+            await ctx.reply('Пожалуйста, введите дату в формате ДД.ММ.ГГГГ');
+            return;
+          }
           const parts = newValue.split('.');
           const dbDate = `${parts[2]}-${parts[1]}-${parts[0]}`;
           updateData[action === 'edit_pass_issue_date' ? 'issue_date' : 'birth_date'] = dbDate;

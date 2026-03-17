@@ -1,6 +1,7 @@
 import { Markup, Scenes } from 'telegraf';
 import { supabase } from '../supabase';
 import { BotContext, PassportData } from '../types/session';
+import { validators } from '../utils/validation';
 
 export const passportScene = new Scenes.WizardScene<BotContext>(
   'passport',
@@ -23,21 +24,31 @@ export const passportScene = new Scenes.WizardScene<BotContext>(
       }
     }
 
-    await ctx.reply('Введите серию паспорта:');
+    await ctx.reply('Введите серию паспорта (4 цифры):');
     return ctx.wizard.next();
   },
 
   async (ctx) => {
     if (!ctx.message || !('text' in ctx.message)) return;
-    ctx.session.passport!.series = ctx.message.text;
+    const series = ctx.message.text.trim();
+    if (!validators.passportSeries(series)) {
+      await ctx.reply('Пожалуйста, введите серию паспорта корректно (4 цифры):');
+      return;
+    }
+    ctx.session.passport!.series = series;
 
-    await ctx.reply('Введите номер паспорта:');
+    await ctx.reply('Введите номер паспорта (6 цифр):');
     return ctx.wizard.next();
   },
 
   async (ctx) => {
     if (!ctx.message || !('text' in ctx.message)) return;
-    ctx.session.passport!.number = ctx.message.text;
+    const number = ctx.message.text.trim();
+    if (!validators.passportNumber(number)) {
+      await ctx.reply('Пожалуйста, введите номер паспорта корректно (6 цифр):');
+      return;
+    }
+    ctx.session.passport!.number = number;
 
     await ctx.reply('Кем выдан:');
     return ctx.wizard.next();
@@ -53,7 +64,12 @@ export const passportScene = new Scenes.WizardScene<BotContext>(
 
   async (ctx) => {
     if (!ctx.message || !('text' in ctx.message)) return;
-    ctx.session.passport!.issue_date = ctx.message.text;
+    const issueDate = ctx.message.text.trim();
+    if (!validators.date(issueDate)) {
+      await ctx.reply('Пожалуйста, введите дату выдачи корректно (ДД.ММ.ГГГГ):');
+      return;
+    }
+    ctx.session.passport!.issue_date = issueDate;
 
     await ctx.reply('Дата рождения (ДД.ММ.ГГГГ):');
     return ctx.wizard.next();
@@ -62,7 +78,12 @@ export const passportScene = new Scenes.WizardScene<BotContext>(
   // Новый шаг: Пол
   async (ctx) => {
     if (!ctx.message || !('text' in ctx.message)) return;
-    ctx.session.passport!.birth = ctx.message.text;
+    const birthDate = ctx.message.text.trim();
+    if (!validators.date(birthDate)) {
+      await ctx.reply('Пожалуйста, введите дату рождения корректно (ДД.ММ.ГГГГ):');
+      return;
+    }
+    ctx.session.passport!.birth = birthDate;
 
     await ctx.reply(
       'Выберите пол:',
@@ -79,9 +100,15 @@ export const passportScene = new Scenes.WizardScene<BotContext>(
   // Шаг: Разряд
   async (ctx) => {
     if (!ctx.callbackQuery || !('data' in ctx.callbackQuery)) return;
-    const gender = ctx.callbackQuery.data === 'gender_male' ? 'male' : 'female';
+    const cbQuery = ctx.callbackQuery as any;
+    const gender = cbQuery.data === 'gender_male' ? 'male' : 'female';
+    const genderText = gender === 'male' ? 'Мужской' : 'Женский';
+
     ctx.session.passport!.gender = gender;
     await ctx.answerCbQuery();
+
+    // Убираем кнопки выбора пола
+    await ctx.editMessageText(`Пол: ${genderText}`).catch(() => {});
 
     const ranks = [
       [
@@ -102,9 +129,13 @@ export const passportScene = new Scenes.WizardScene<BotContext>(
   // Шаг: Фото
   async (ctx) => {
     if (!ctx.callbackQuery || !('data' in ctx.callbackQuery)) return;
-    const rank = ctx.callbackQuery.data.replace('rank_', '');
+    const cbQuery = ctx.callbackQuery as any;
+    const rank = cbQuery.data.replace('rank_', '');
     ctx.session.passport!.rank = rank;
     await ctx.answerCbQuery();
+
+    // Убираем кнопки выбора разряда
+    await ctx.editMessageText(`Разряд: ${rank}`).catch(() => {});
 
     await ctx.reply('Загрузите фото 3x4');
     return ctx.wizard.next();

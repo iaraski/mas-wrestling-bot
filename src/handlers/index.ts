@@ -5,6 +5,9 @@ import { supabase } from '../supabase';
 
 export function setupHandlers(bot: Telegraf<BotContext>) {
   bot.start(async (ctx) => {
+    // Принудительно выходим из любой активной сцены при /start
+    await ctx.scene.leave().catch(() => {});
+    
     const currentStage = await checkUserStage(ctx);
     console.log(`[Bot Start] User stage: ${currentStage}`);
 
@@ -40,7 +43,10 @@ export function setupHandlers(bot: Telegraf<BotContext>) {
   bot.hears('👤 Профиль', async (ctx) => {
     const userId = ctx.session.supabaseUserId;
     if (!userId) {
-      return ctx.reply('Пожалуйста, введите /start для инициализации профиля.');
+      return ctx.reply(
+        'Пожалуйста, введите /start для инициализации профиля.',
+        Markup.inlineKeyboard([[{ text: 'Начать регистрацию', callback_data: 'register' }]]),
+      );
     }
 
     try {
@@ -77,7 +83,10 @@ export function setupHandlers(bot: Telegraf<BotContext>) {
       }
 
       if (!profile) {
-        return ctx.reply('Профиль еще не создан. Пройдите регистрацию.');
+        return ctx.reply(
+          'Профиль еще не создан. Пройдите регистрацию.',
+          Markup.inlineKeyboard([[{ text: 'Начать регистрацию', callback_data: 'register' }]]),
+        );
       }
 
       let locationText = 'Не указано';
@@ -144,21 +153,19 @@ export function setupHandlers(bot: Telegraf<BotContext>) {
     await ctx.scene.enter('edit-profile');
   });
 
-  bot.action('register', (ctx) => {
-    ctx.answerCbQuery().catch(console.error);
-    (async () => {
-      try {
-        const currentStage = await checkUserStage(ctx);
-        if (currentStage === 'first') {
-          await ctx.scene.enter('passport');
-        } else {
-          await ctx.scene.enter('first-registration');
-        }
-      } catch (e) {
-        console.error('Error in register action:', e);
-        await ctx.reply('Произошла ошибка, попробуйте /start еще раз.');
+  bot.action('register', async (ctx) => {
+    await ctx.answerCbQuery().catch(console.error);
+    try {
+      const currentStage = await checkUserStage(ctx);
+      if (currentStage === 'first') {
+        await ctx.scene.enter('passport');
+      } else {
+        await ctx.scene.enter('first-registration');
       }
-    })();
+    } catch (e) {
+      console.error('Error in register action:', e);
+      await ctx.reply('Произошла ошибка, попробуйте /start еще раз.');
+    }
   });
 
   bot.action('passport', async (ctx) => {

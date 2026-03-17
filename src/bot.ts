@@ -2,6 +2,7 @@ import dotenv from 'dotenv';
 import { Scenes, Telegraf, session } from 'telegraf';
 
 import { setupHandlers } from './handlers';
+import { antiSpamMiddleware } from './middleware/antiSpam';
 import { loggerMiddleware } from './middleware/logger';
 import { editPassportScene } from './scenes/editPassport.scene';
 import { editProfileScene } from './scenes/editProfile.scene';
@@ -23,8 +24,9 @@ const stage = new Scenes.Stage<BotContext>([
 
 // 2. Middleware
 bot.use(session());
-bot.use(loggerMiddleware);
-bot.use(stage.middleware());
+bot.use(loggerMiddleware); // Сначала логируем
+bot.use(antiSpamMiddleware); // Потом блокируем спам
+bot.use(stage.middleware()); // Потом сцены
 
 // 3. Обработчики
 setupHandlers(bot);
