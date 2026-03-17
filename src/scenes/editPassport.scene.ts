@@ -1,0 +1,89 @@
+import { Scenes, Markup } from 'telegraf';
+import { supabase } from '../supabase';
+import { BotContext } from '../types/session';
+
+export const editPassportScene = new Scenes.WizardScene<BotContext>(
+  'edit-passport',
+
+  // 1. Выбор поля для редактирования
+  async (ctx) => {
+    await ctx.reply('Что вы хотите изменить в паспорте?', Markup.inlineKeyboard([
+      [Markup.button.callback('Серия/Номер', 'edit_pass_series_number'), Markup.button.callback('Кем выдан', 'edit_pass_issued_by')],
+      [Markup.button.callback('Дата выдачи', 'edit_pass_issue_date'), Markup.button.callback('Дата рождения', 'edit_pass_birth_date')],
+      [Markup.button.callback('Разряд', 'edit_pass_rank'), Markup.button.callback('Фото', 'edit_pass_photo')],
+      [Markup.button.callback('❌ Назад', 'cancel_edit_passport')]
+    ]));
+    return ctx.wizard.next();
+  },
+
+  // 2. Обработка выбора и запрос нового значения
+  async (ctx) => {
+    if (!ctx.callbackQuery || !('data' in ctx.callbackQuery)) return;
+    const action = ctx.callbackQuery.data;
+    await ctx.answerCbQuery();
+
+    if (action === 'cancel_edit_passport') {
+      await ctx.scene.enter('edit-profile');
+      return;
+    }
+
+    (ctx.wizard.state as any).editAction = action;
+
+    const prompts: Record<string, string> = {
+      edit_pass_series_number: 'Введите новую серию и номер паспорта:',
+      edit_pass_issued_by: 'Кем выдан паспорт?:',
+      edit_pass_issue_date: 'Введите новую дату выдачи (ДД.ММ.ГГГГ):',
+      edit_pass_birth_date: 'Введите новую дату рождения (ДД.ММ.ГГГГ):',
+      edit_pass_rank: 'Введите новый разряд:',
+      edit_pass_photo: 'Загрузите новое фото:'
+    };
+
+    await ctx.reply(prompts[action]);
+    return ctx.wizard.next();
+  },
+
+  // 3. Сохранение изменений
+  async (ctx) => {
+    const action = (ctx.wizard.state as any).editAction;
+    const userId = ctx.session.supabaseUserId;
+
+    if (!userId) return ctx.scene.leave();
+
+    try {
+      const { data: athlete } = await supabase.from('athletes').select('id').eq('user_id', userId).single();
+      if (!athlete) throw new Error('Athlete not found');
+
+      let updateData: any = {};
+
+      if (action === 'edit_pass_photo') {
+        if (!ctx.message || !('photo' in ctx.message)) return ctx.reply('Пожалуйста, отправьте фото.');
+        updateData.photo_url = ctx.message.photo[ctx.message.photo.length - 1].file_id;
+      } else {
+        if (!ctx.message || !('text' in ctx.message)) return;
+        const newValue = ctx.message.text;
+
+        if (action === 'edit_pass_series_number') {
+          const [series, number] = newValue.split(/\s+/);
+          updateData = { series, number };
+        } else if (action === 'edit_pass_issued_by') {
+          updateData.issued_by = newValue;
+        } else if (action === 'edit_pass_issue_date' || action === 'edit_pass_birth_date') {
+          const parts = newValue.split('.');
+          const dbDate = `${parts[2]}-${parts[1]}-${parts[0]}`;
+          updateData[action === 'edit_pass_issue_date' ? 'issue_date' : 'birth_date'] = dbDate;
+        } else if (action === 'edit_pass_rank') {
+          updateData.rank = newValue;
+        }
+      }
+
+      await supabase.from('passports').update(updateData).eq('athlete_id', athlete.id);
+      await ctx.reply('✅ Паспортные данные успешно обновлены!');
+
+    } catch (err) {
+      console.error('Update passport error:', err);
+      await ctx.reply('❌ Ошибка при обновлении паспортных данных.');
+    }
+
+    return ctx.scene.leave();
+  }
+);
