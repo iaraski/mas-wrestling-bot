@@ -1,6 +1,7 @@
 import { Markup, Scenes } from 'telegraf';
 import { supabase } from '../supabase';
 import { BotContext } from '../types/session';
+import { validators } from '../utils/validation';
 
 export const editProfileScene = new Scenes.WizardScene<BotContext>(
   'edit-profile',
@@ -28,25 +29,35 @@ export const editProfileScene = new Scenes.WizardScene<BotContext>(
   // 2. Обработка выбора и запрос нового значения
   async (ctx) => {
     if (!ctx.callbackQuery || !('data' in ctx.callbackQuery)) return;
-    const action = ctx.callbackQuery.data;
+    const cbQuery = ctx.callbackQuery as any;
+    const action = cbQuery.data;
+    const actionText = cbQuery.message?.reply_markup?.inline_keyboard
+      ?.flat()
+      .find((b: any) => b.callback_data === action)?.text;
+
     await ctx.answerCbQuery();
 
     if (action === 'cancel_edit') {
-      await ctx.reply('Редактирование отменено.');
+      await ctx.editMessageText('Редактирование отменено.').catch(() => {});
       return ctx.scene.leave();
     }
 
     if (action === 'edit_passport') {
-      return ctx.scene.enter('edit-passport');
+      await ctx.editMessageText('Переход к редактированию паспорта...').catch(() => {});
+      await ctx.scene.enter('edit-passport');
+      return;
     }
+
+    // Убираем кнопки выбора поля
+    await ctx.editMessageText(`Выбрано для изменения: ${actionText}`).catch(() => {});
 
     (ctx.wizard.state as any).editAction = action;
 
     const prompts: Record<string, string> = {
-      edit_full_name: 'Введите новое ФИО:',
+      edit_full_name: 'Введите новое ФИО (три слова):',
       edit_email: 'Введите новый Email:',
-      edit_phone: 'Введите новый номер телефона:',
-      edit_coach: 'Введите новое ФИО тренера:',
+      edit_phone: 'Введите новый номер телефона (начиная с 8, 11 цифр):',
+      edit_coach: 'Введите новое ФИО тренера (три слова):',
     };
 
     await ctx.reply(prompts[action]);
@@ -56,7 +67,7 @@ export const editProfileScene = new Scenes.WizardScene<BotContext>(
   // 3. Сохранение изменений
   async (ctx) => {
     if (!ctx.message || !('text' in ctx.message)) return;
-    const newValue = ctx.message.text;
+    const newValue = ctx.message.text.trim();
     const action = (ctx.wizard.state as any).editAction;
     const userId = ctx.session.supabaseUserId;
 
@@ -64,12 +75,28 @@ export const editProfileScene = new Scenes.WizardScene<BotContext>(
 
     try {
       if (action === 'edit_full_name') {
+        if (!validators.fullName(newValue)) {
+          await ctx.reply('Пожалуйста, введите ФИО полностью (три слова через пробел):');
+          return;
+        }
         await supabase.from('profiles').update({ full_name: newValue }).eq('user_id', userId);
       } else if (action === 'edit_email') {
+        if (!validators.email(newValue)) {
+          await ctx.reply('Пожалуйста, введите корректный email:');
+          return;
+        }
         await supabase.from('users').update({ email: newValue }).eq('id', userId);
       } else if (action === 'edit_phone') {
+        if (!validators.phone(newValue)) {
+          await ctx.reply('Пожалуйста, введите номер телефона корректно (начиная с 8, 11 цифр):');
+          return;
+        }
         await supabase.from('profiles').update({ phone: newValue }).eq('user_id', userId);
       } else if (action === 'edit_coach') {
+        if (!validators.fullName(newValue)) {
+          await ctx.reply('Пожалуйста, введите ФИО тренера полностью (три слова через пробел):');
+          return;
+        }
         await supabase.from('athletes').update({ coach_name: newValue }).eq('user_id', userId);
       }
 
