@@ -8,6 +8,7 @@ import { editPassportScene } from './scenes/editPassport.scene';
 import { editProfileScene } from './scenes/editProfile.scene';
 import { firstRegistrationScene } from './scenes/firstRegistration.scene';
 import { passportScene } from './scenes/passport.scene';
+import { applyCompetitionScene } from './scenes/applyCompetition.scene';
 import { BotContext } from './types/session';
 
 dotenv.config();
@@ -20,6 +21,7 @@ const stage = new Scenes.Stage<BotContext>([
   passportScene,
   editProfileScene,
   editPassportScene,
+  applyCompetitionScene,
 ]);
 
 // 2. Middleware

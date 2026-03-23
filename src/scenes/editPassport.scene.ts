@@ -1,4 +1,4 @@
-import { Scenes, Markup } from 'telegraf';
+import { Markup, Scenes } from 'telegraf';
 import { supabase } from '../supabase';
 import { BotContext } from '../types/session';
 import { validators } from '../utils/validation';
@@ -8,12 +8,27 @@ export const editPassportScene = new Scenes.WizardScene<BotContext>(
 
   // 1. Выбор поля для редактирования
   async (ctx) => {
-    await ctx.reply('Что вы хотите изменить в паспорте?', Markup.inlineKeyboard([
-      [Markup.button.callback('Серия/Номер', 'edit_pass_series_number'), Markup.button.callback('Кем выдан', 'edit_pass_issued_by')],
-      [Markup.button.callback('Дата выдачи', 'edit_pass_issue_date'), Markup.button.callback('Дата рождения', 'edit_pass_birth_date')],
-      [Markup.button.callback('Разряд', 'edit_pass_rank'), Markup.button.callback('Фото', 'edit_pass_photo')],
-      [Markup.button.callback('❌ Назад', 'cancel_edit_passport')]
-    ]));
+    await ctx.reply(
+      'Что вы хотите изменить в паспорте?',
+      Markup.inlineKeyboard([
+        [
+          Markup.button.callback('Серия/Номер', 'edit_pass_series_number'),
+          Markup.button.callback('Кем выдан', 'edit_pass_issued_by'),
+        ],
+        [
+          Markup.button.callback('Дата выдачи', 'edit_pass_issue_date'),
+          Markup.button.callback('Дата рождения', 'edit_pass_birth_date'),
+        ],
+        [
+          Markup.button.callback('Разряд', 'edit_pass_rank'),
+          Markup.button.callback('Пол', 'edit_pass_gender'),
+        ],
+        [
+          Markup.button.callback('Фото', 'edit_pass_photo'),
+          Markup.button.callback('❌ Назад', 'cancel_edit_passport'),
+        ],
+      ]),
+    );
     return ctx.wizard.next();
   },
 
@@ -40,15 +55,29 @@ export const editPassportScene = new Scenes.WizardScene<BotContext>(
     (ctx.wizard.state as any).editAction = action;
 
     const prompts: Record<string, string> = {
-      edit_pass_series_number: 'Введите новую серию и номер паспорта через пробел (например: 1234 567890):',
+      edit_pass_series_number:
+        'Введите новую серию и номер паспорта через пробел (например: 1234 567890):',
       edit_pass_issued_by: 'Кем выдан паспорт?:',
       edit_pass_issue_date: 'Введите новую дату выдачи (ДД.ММ.ГГГГ):',
       edit_pass_birth_date: 'Введите новую дату рождения (ДД.ММ.ГГГГ):',
       edit_pass_rank: 'Введите новый разряд:',
-      edit_pass_photo: 'Загрузите новое фото:'
+      edit_pass_photo: 'Загрузите новое фото:',
+      edit_pass_gender: 'Выберите пол:',
     };
 
-    await ctx.reply(prompts[action]);
+    if (action === 'edit_pass_gender') {
+      await ctx.reply(
+        prompts[action],
+        Markup.inlineKeyboard([
+          [
+            Markup.button.callback('Мужской', 'set_gender_male'),
+            Markup.button.callback('Женский', 'set_gender_female'),
+          ],
+        ]),
+      );
+    } else {
+      await ctx.reply(prompts[action]);
+    }
     return ctx.wizard.next();
   },
 
@@ -60,21 +89,38 @@ export const editPassportScene = new Scenes.WizardScene<BotContext>(
     if (!userId) return ctx.scene.leave();
 
     try {
-      const { data: athlete } = await supabase.from('athletes').select('id').eq('user_id', userId).single();
+      const { data: athlete } = await supabase
+        .from('athletes')
+        .select('id')
+        .eq('user_id', userId)
+        .single();
       if (!athlete) throw new Error('Athlete not found');
 
       let updateData: any = {};
 
       if (action === 'edit_pass_photo') {
-        if (!ctx.message || !('photo' in ctx.message)) return ctx.reply('Пожалуйста, отправьте фото.');
+        if (!ctx.message || !('photo' in ctx.message))
+          return ctx.reply('Пожалуйста, отправьте фото.');
         updateData.photo_url = ctx.message.photo[ctx.message.photo.length - 1].file_id;
+      } else if (action === 'edit_pass_gender') {
+        if (!ctx.callbackQuery || !('data' in ctx.callbackQuery)) return;
+        const cbQuery = ctx.callbackQuery as any;
+        updateData.gender = cbQuery.data === 'set_gender_male' ? 'male' : 'female';
+        await ctx.answerCbQuery();
+        await ctx
+          .editMessageText(`Выбран пол: ${updateData.gender === 'male' ? 'Мужской' : 'Женский'}`)
+          .catch(() => {});
       } else {
         if (!ctx.message || !('text' in ctx.message)) return;
         const newValue = ctx.message.text.trim();
 
         if (action === 'edit_pass_series_number') {
           const parts = newValue.split(/\s+/);
-          if (parts.length !== 2 || !validators.passportSeries(parts[0]) || !validators.passportNumber(parts[1])) {
+          if (
+            parts.length !== 2 ||
+            !validators.passportSeries(parts[0]) ||
+            !validators.passportNumber(parts[1])
+          ) {
             await ctx.reply('Пожалуйста, введите серию (4 цифры) и номер (6 цифр) через пробел.');
             return;
           }
@@ -96,12 +142,11 @@ export const editPassportScene = new Scenes.WizardScene<BotContext>(
 
       await supabase.from('passports').update(updateData).eq('athlete_id', athlete.id);
       await ctx.reply('✅ Паспортные данные успешно обновлены!');
-
     } catch (err) {
       console.error('Update passport error:', err);
       await ctx.reply('❌ Ошибка при обновлении паспортных данных.');
     }
 
     return ctx.scene.leave();
-  }
+  },
 );

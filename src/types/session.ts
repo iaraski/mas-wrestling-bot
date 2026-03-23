@@ -1,13 +1,17 @@
 import { Context, Scenes } from 'telegraf';
 
 export interface RegistrationData {
+  country?: string;
   country_id?: string;
+  district?: string;
   district_id?: string;
+  region?: string;
   region_id?: string;
   full_name?: string;
+  coach?: string;
+  coach_name?: string;
   email?: string;
   phone?: string;
-  coach_name?: string;
 }
 
 export interface PassportData {
@@ -16,16 +20,15 @@ export interface PassportData {
   issued?: string;
   issue_date?: string;
   birth?: string;
-  gender?: string;
   rank?: string;
+  gender?: string;
   photo_url?: string;
 }
 
 export interface SessionData extends Scenes.WizardSessionData {
-  supabaseUserId?: string;
   registration?: RegistrationData;
   passport?: PassportData;
-  isProcessing?: boolean; // Флаг для предотвращения спама по кнопкам
+  supabaseUserId?: string;
 }
 
 export interface BotContext extends Context {

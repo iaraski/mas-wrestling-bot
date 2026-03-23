@@ -32,6 +32,10 @@ out/
 coverage/
 *.lcov
 
+# Subprojects
+frontend/
+backend/
+
 # Misc
 *.tgz
 *.swp
