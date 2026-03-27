@@ -143,13 +143,32 @@ export const passportScene = new Scenes.WizardScene<BotContext>(
 
   async (ctx) => {
     if (!ctx.message || !('photo' in ctx.message)) {
-      await ctx.reply('Пожалуйста, отправьте именно фото.');
+      await ctx.reply('Пожалуйста, отправьте фото для профиля (изображение):');
       return;
     }
 
     // Сохраняем file_id вместо прямой ссылки
     const photo = ctx.message.photo[ctx.message.photo.length - 1];
     ctx.session.passport!.photo_url = photo.file_id;
+
+    await ctx.reply(
+      'Отправьте скан/фото разворота паспорта (как изображение или как PDF-документ):',
+    );
+    return ctx.wizard.next();
+  },
+
+  async (ctx) => {
+    let scanId = '';
+    if (ctx.message && 'photo' in ctx.message) {
+      scanId = ctx.message.photo[ctx.message.photo.length - 1].file_id;
+    } else if (ctx.message && 'document' in ctx.message) {
+      scanId = ctx.message.document.file_id;
+    } else {
+      await ctx.reply('Пожалуйста, отправьте скан паспорта (изображение или документ):');
+      return;
+    }
+
+    ctx.session.passport!.passport_scan_url = scanId;
 
     const data = ctx.session.passport!;
     const userId = ctx.session.supabaseUserId!;
@@ -186,6 +205,7 @@ export const passportScene = new Scenes.WizardScene<BotContext>(
           gender: data.gender,
           rank: data.rank,
           photo_url: data.photo_url,
+          passport_scan_url: data.passport_scan_url,
         },
         { onConflict: 'athlete_id' },
       );

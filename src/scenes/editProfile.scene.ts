@@ -19,6 +19,7 @@ export const editProfileScene = new Scenes.WizardScene<BotContext>(
           Markup.button.callback('Телефон', 'edit_phone'),
           Markup.button.callback('ФИО Тренера', 'edit_coach'),
         ],
+        [Markup.button.callback('Населенный пункт', 'edit_city')],
         [Markup.button.callback('🪪 Паспортные данные', 'edit_passport')],
         [Markup.button.callback('❌ Отмена', 'cancel_edit')],
       ]),
@@ -58,6 +59,7 @@ export const editProfileScene = new Scenes.WizardScene<BotContext>(
       edit_email: 'Введите новый Email:',
       edit_phone: 'Введите новый номер телефона (начиная с 8, 11 цифр):',
       edit_coach: 'Введите новое ФИО тренера (три слова):',
+      edit_city: 'Введите новый населенный пункт (город/село):',
     };
 
     await ctx.reply(prompts[action]);
@@ -98,6 +100,8 @@ export const editProfileScene = new Scenes.WizardScene<BotContext>(
           return;
         }
         await supabase.from('athletes').update({ coach_name: newValue }).eq('user_id', userId);
+      } else if (action === 'edit_city') {
+        await supabase.from('profiles').update({ city: newValue }).eq('user_id', userId);
       }
 
       await ctx.reply('✅ Изменения успешно сохранены!');
