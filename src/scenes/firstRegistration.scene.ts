@@ -109,7 +109,7 @@ export const firstRegistrationScene = new Scenes.WizardScene<BotContext>(
     return ctx.wizard.next();
   },
 
-  // 4. Ввод ФИО пользователя
+  // 4. Ввод населенного пункта (город)
   async (ctx) => {
     if (!ctx.callbackQuery || !('data' in ctx.callbackQuery)) return;
     const cbQuery = ctx.callbackQuery as any;
@@ -125,79 +125,70 @@ export const firstRegistrationScene = new Scenes.WizardScene<BotContext>(
 
     ctx.session.registration!.region_id = regionId;
 
-    await ctx.reply('Введите ваше ФИО (полностью):');
+    await ctx.reply('Введите ваш населенный пункт (город/село):');
     return ctx.wizard.next();
   },
 
-  // 5. Ввод ФИО
+  // 5. Ввод ФИО пользователя
   async (ctx) => {
-    console.log('[Registration Scene] Step 5: Receiving Name');
-    if (!ctx.message || !('text' in ctx.message)) {
-      console.log('[Registration Scene] Step 5: No text message received');
-      return;
-    }
+    if (!ctx.message || !('text' in ctx.message)) return;
+    const city = ctx.message.text.trim();
+    ctx.session.registration!.city = city;
 
-    const name = ctx.message.text;
-    if (!validators.fullName(name)) {
+    await ctx.reply('Введите ваше ФИО полностью (три слова через пробел):');
+    return ctx.wizard.next();
+  },
+
+  // 6. Ввод Email
+  async (ctx) => {
+    if (!ctx.message || !('text' in ctx.message)) return;
+    const fullName = ctx.message.text.trim();
+
+    if (!validators.fullName(fullName)) {
       await ctx.reply('Пожалуйста, введите ФИО полностью (три слова через пробел):');
       return;
     }
 
-    ctx.session.registration!.full_name = name;
-    console.log(`[Registration Scene] Name saved: ${name}`);
+    ctx.session.registration!.full_name = fullName;
 
-    await ctx.reply('Введите ваш email:');
-    return ctx.wizard.next();
-  },
-
-  // 6. Ввод email
-  async (ctx) => {
-    console.log('[Registration Scene] Step 6: Receiving Email');
-    if (!ctx.message || !('text' in ctx.message)) {
-      console.log('[Registration Scene] Step 6: No text message received');
-      return;
-    }
-
-    const email = ctx.message.text;
-    if (!validators.email(email)) {
-      await ctx.reply('Пожалуйста, введите корректный email:');
-      return;
-    }
-
-    ctx.session.registration!.email = email;
-    console.log(`[Registration Scene] Email saved: ${email}`);
-
-    await ctx.reply('Введите ваш номер телефона (начиная с 8, 11 цифр):');
+    await ctx.reply('Введите ваш Email:');
     return ctx.wizard.next();
   },
 
   // 7. Ввод телефона
   async (ctx) => {
-    console.log('[Registration Scene] Step 7: Receiving Phone');
-    let phone = '';
+    if (!ctx.message || !('text' in ctx.message)) return;
+    const email = ctx.message.text.trim();
 
-    if (ctx.message && 'text' in ctx.message) {
-      phone = ctx.message.text;
-    } else if (ctx.message && 'contact' in ctx.message) {
-      phone = ctx.message.contact.phone_number;
+    if (!validators.email(email)) {
+      await ctx.reply('Пожалуйста, введите корректный Email:');
+      return;
     }
 
-    if (!phone || !validators.phone(phone)) {
-      console.log('[Registration Scene] Step 7: Invalid phone number');
+    ctx.session.registration!.email = email;
+
+    await ctx.reply('Введите ваш номер телефона (начиная с 8, 11 цифр, без пробелов):');
+    return ctx.wizard.next();
+  },
+
+  // 8. Ввод ФИО тренера и сохранение
+  async (ctx) => {
+    if (!ctx.message || !('text' in ctx.message)) return;
+    const phone = ctx.message.text.trim();
+
+    if (!validators.phone(phone)) {
       await ctx.reply('Пожалуйста, введите номер телефона корректно (начиная с 8, 11 цифр):');
       return;
     }
 
     ctx.session.registration!.phone = phone;
-    console.log(`[Registration Scene] Phone saved: ${phone}`);
 
-    await ctx.reply('Введите ФИО вашего тренера (три слова через пробел):');
+    await ctx.reply('Введите ФИО вашего тренера полностью (три слова через пробел):');
     return ctx.wizard.next();
   },
 
-  // 8. Сохранение данных и предложение продолжить
+  // 9. Сохранение данных
   async (ctx) => {
-    console.log('[Registration Scene] Step 8: Receiving Coach Name');
     if (!ctx.message || !('text' in ctx.message)) {
       console.log('[Registration Scene] Step 8: No text message received');
       return;
@@ -241,6 +232,7 @@ export const firstRegistrationScene = new Scenes.WizardScene<BotContext>(
           user_id: userId,
           full_name: regData.full_name,
           location_id: regData.region_id,
+          city: regData.city,
           phone: regData.phone,
         },
         { onConflict: 'user_id' },
@@ -281,14 +273,12 @@ export const firstRegistrationScene = new Scenes.WizardScene<BotContext>(
       return ctx.wizard.next();
     } catch (err) {
       console.error('[Registration Scene] Critical Error:', err);
-      await ctx.reply(
-        'Произошла ошибка при сохранении данных. Проверьте, добавлены ли все нужные колонки в БД (coach_name).',
-      );
+      await ctx.reply('Произошла ошибка при сохранении данных.');
       return ctx.scene.leave();
     }
   },
 
-  // 9. Обработка выбора продолжения
+  // 10. Обработка выбора продолжения
   async (ctx) => {
     if (!ctx.callbackQuery || !('data' in ctx.callbackQuery)) return;
     const cbQuery = ctx.callbackQuery as any;

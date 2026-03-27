@@ -277,6 +277,7 @@ export function setupHandlers(bot: Telegraf<BotContext>) {
           `
           full_name,
           phone,
+          city,
           location:locations(name, parent:locations(name, parent:locations(name)))
         `,
         )
@@ -336,6 +337,7 @@ export function setupHandlers(bot: Telegraf<BotContext>) {
 <b>Телефон:</b> ${profile.phone || 'Не указан'}
 <b>Тренер:</b> ${athlete?.coach_name || 'Не указан'}
 <b>Локация:</b> ${locationText}
+<b>Город/село:</b> ${profile.city || 'Не указан'}
       `;
 
       if (passportData) {
@@ -377,6 +379,33 @@ export function setupHandlers(bot: Telegraf<BotContext>) {
   });
 
   bot.action('edit_profile', async (ctx) => {
+    const userId = ctx.session.supabaseUserId;
+    if (userId) {
+      try {
+        const { data: athlete } = await supabase
+          .from('athletes')
+          .select('id')
+          .eq('user_id', userId)
+          .single();
+
+        if (athlete) {
+          const { data: passport } = await supabase
+            .from('passports')
+            .select('is_verified')
+            .eq('athlete_id', athlete.id)
+            .maybeSingle();
+
+          if (passport?.is_verified) {
+            return ctx.answerCbQuery('Ваш профиль подтвержден, редактирование запрещено.', {
+              show_alert: true,
+            });
+          }
+        }
+      } catch (err) {
+        console.error('Check verified status error:', err);
+      }
+    }
+
     await ctx.answerCbQuery();
     await ctx.scene.enter('edit-profile');
   });

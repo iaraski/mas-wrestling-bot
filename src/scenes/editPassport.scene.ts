@@ -25,8 +25,9 @@ export const editPassportScene = new Scenes.WizardScene<BotContext>(
         ],
         [
           Markup.button.callback('Фото', 'edit_pass_photo'),
-          Markup.button.callback('❌ Назад', 'cancel_edit_passport'),
+          Markup.button.callback('Скан паспорта', 'edit_pass_scan'),
         ],
+        [Markup.button.callback('❌ Назад', 'cancel_edit_passport')],
       ]),
     );
     return ctx.wizard.next();
@@ -62,6 +63,7 @@ export const editPassportScene = new Scenes.WizardScene<BotContext>(
       edit_pass_birth_date: 'Введите новую дату рождения (ДД.ММ.ГГГГ):',
       edit_pass_rank: 'Введите новый разряд:',
       edit_pass_photo: 'Загрузите новое фото:',
+      edit_pass_scan: 'Загрузите новый скан паспорта (изображение или документ):',
       edit_pass_gender: 'Выберите пол:',
     };
 
@@ -102,6 +104,14 @@ export const editPassportScene = new Scenes.WizardScene<BotContext>(
         if (!ctx.message || !('photo' in ctx.message))
           return ctx.reply('Пожалуйста, отправьте фото.');
         updateData.photo_url = ctx.message.photo[ctx.message.photo.length - 1].file_id;
+      } else if (action === 'edit_pass_scan') {
+        if (ctx.message && 'photo' in ctx.message) {
+          updateData.passport_scan_url = ctx.message.photo[ctx.message.photo.length - 1].file_id;
+        } else if (ctx.message && 'document' in ctx.message) {
+          updateData.passport_scan_url = ctx.message.document.file_id;
+        } else {
+          return ctx.reply('Пожалуйста, отправьте скан паспорта (изображение или документ).');
+        }
       } else if (action === 'edit_pass_gender') {
         if (!ctx.callbackQuery || !('data' in ctx.callbackQuery)) return;
         const cbQuery = ctx.callbackQuery as any;
