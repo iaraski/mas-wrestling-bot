@@ -353,22 +353,25 @@ export function setupHandlers(bot: Telegraf<BotContext>) {
         `;
       }
 
+      const currentStage = await checkUserStage(ctx);
+      const isComplete = currentStage === 'complete';
+
+      const actionButton = isComplete
+        ? [{ text: '📝 Редактировать профиль', callback_data: 'edit_profile' }]
+        : [{ text: '⚠️ Дозаполнить профиль', callback_data: 'register' }];
+
       if (passportData?.photo_url) {
         await ctx.replyWithPhoto(passportData.photo_url, {
           caption: message,
           parse_mode: 'HTML',
           reply_markup: {
-            inline_keyboard: [
-              [{ text: '📝 Редактировать профиль', callback_data: 'edit_profile' }],
-            ],
+            inline_keyboard: [actionButton],
           },
         });
       } else {
         await ctx.replyWithHTML(message, {
           reply_markup: {
-            inline_keyboard: [
-              [{ text: '📝 Редактировать профиль', callback_data: 'edit_profile' }],
-            ],
+            inline_keyboard: [actionButton],
           },
         });
       }
@@ -379,6 +382,13 @@ export function setupHandlers(bot: Telegraf<BotContext>) {
   });
 
   bot.action('edit_profile', async (ctx) => {
+    const currentStage = await checkUserStage(ctx);
+    if (currentStage !== 'complete') {
+      return ctx.answerCbQuery('Ваш профиль заполнен не до конца. Пожалуйста, дозаполните его.', {
+        show_alert: true,
+      });
+    }
+
     const userId = ctx.session.supabaseUserId;
     if (userId) {
       try {
