@@ -75,16 +75,27 @@ export const editPassportScene = new Scenes.WizardScene<BotContext>(
             Markup.button.callback('Мужской', 'set_gender_male'),
             Markup.button.callback('Женский', 'set_gender_female'),
           ],
+          [Markup.button.callback('❌ Отмена', 'cancel_input')],
         ]),
       );
     } else {
-      await ctx.reply(prompts[action]);
+      await ctx.reply(prompts[action], Markup.inlineKeyboard([
+        [Markup.button.callback('❌ Отмена', 'cancel_input')]
+      ]));
     }
     return ctx.wizard.next();
   },
 
   // 3. Сохранение изменений
   async (ctx) => {
+    if (ctx.callbackQuery && 'data' in ctx.callbackQuery) {
+      if ((ctx.callbackQuery as any).data === 'cancel_input') {
+        await ctx.answerCbQuery();
+        await ctx.editMessageText('Редактирование отменено.').catch(() => {});
+        return ctx.scene.leave();
+      }
+    }
+
     const action = (ctx.wizard.state as any).editAction;
     const userId = ctx.session.supabaseUserId;
 
