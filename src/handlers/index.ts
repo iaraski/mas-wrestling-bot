@@ -14,8 +14,8 @@ export function setupHandlers(bot: Telegraf<BotContext>) {
   const setMainMenu = async (ctx: BotContext) => {
     try {
       const msg: any = await ctx.reply(' ', mainMenu);
-      if (msg?.message_id) {
-        await ctx.deleteMessage(msg.message_id).catch(() => {});
+      if (msg?.message_id && ctx.chat?.id) {
+        await ctx.telegram.deleteMessage(ctx.chat.id, msg.message_id).catch(() => {});
       }
     } catch {
       await ctx.reply('\u200b', mainMenu);

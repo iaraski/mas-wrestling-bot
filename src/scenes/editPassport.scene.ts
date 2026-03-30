@@ -45,7 +45,12 @@ export const editPassportScene = new Scenes.WizardScene<BotContext>(
     await ctx.answerCbQuery();
 
     if (action === 'cancel_edit_passport') {
-      await ctx.deleteMessage().catch(() => {});
+      const messageId = (ctx.callbackQuery as any)?.message?.message_id;
+      if (ctx.chat?.id && messageId) {
+        await ctx.telegram.deleteMessage(ctx.chat.id, messageId).catch(() => {});
+      } else {
+        await ctx.deleteMessage().catch(() => {});
+      }
       await ctx.scene.enter('edit-profile');
       return;
     }
@@ -92,7 +97,18 @@ export const editPassportScene = new Scenes.WizardScene<BotContext>(
     if (ctx.callbackQuery && 'data' in ctx.callbackQuery) {
       if ((ctx.callbackQuery as any).data === 'cancel_input') {
         await ctx.answerCbQuery();
-        await ctx.deleteMessage().catch(() => {});
+        const messageId = (ctx.callbackQuery as any)?.message?.message_id;
+        if (ctx.chat?.id && messageId) {
+          await ctx.telegram.deleteMessage(ctx.chat.id, messageId).catch(async () => {
+            await ctx.editMessageReplyMarkup(undefined).catch(() => {});
+            await ctx.editMessageText(' ').catch(() => {});
+          });
+        } else {
+          await ctx.deleteMessage().catch(async () => {
+            await ctx.editMessageReplyMarkup(undefined).catch(() => {});
+            await ctx.editMessageText(' ').catch(() => {});
+          });
+        }
         return ctx.scene.leave();
       }
     }
