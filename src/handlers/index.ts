@@ -11,6 +11,17 @@ export function setupHandlers(bot: Telegraf<BotContext>) {
 
   const mainMenu = Markup.keyboard([['👤 Профиль', 'Мои заявки'], ['📊 Соревнования']]).resize();
 
+  const setMainMenu = async (ctx: BotContext) => {
+    try {
+      const msg: any = await ctx.reply(' ', mainMenu);
+      if (msg?.message_id) {
+        await ctx.deleteMessage(msg.message_id).catch(() => {});
+      }
+    } catch {
+      await ctx.reply('\u200b', mainMenu);
+    }
+  };
+
   const ensureConsent = async (ctx: BotContext) => {
     const currentStage = await checkUserStage(ctx);
     if (!currentStage) {
@@ -83,19 +94,19 @@ export function setupHandlers(bot: Telegraf<BotContext>) {
         'Для подачи заявки на Первенство России по мас-рестлингу, пожалуйста пройдите регистрацию. ВАЖНО! Данные заполняются как в паспорте!',
         Markup.inlineKeyboard([[{ text: 'Начать регистрацию', callback_data: 'register' }]]),
       );
-      await ctx.reply('\u200b', mainMenu);
+      await setMainMenu(ctx);
     } else if (currentStage === 'first') {
       await ctx.reply(
         'Вы заполнили основные данные. Теперь необходимо внести паспортные данные спортсмена.',
         Markup.inlineKeyboard([[{ text: 'Заполнить паспорт', callback_data: 'register' }]]),
       );
-      await ctx.reply('\u200b', mainMenu);
+      await setMainMenu(ctx);
     } else if (currentStage === 'passport') {
       await ctx.reply(
         'Вам необходимо заполнить паспортные данные.',
         Markup.inlineKeyboard([[{ text: 'Заполнить паспорт', callback_data: 'passport' }]]),
       );
-      await ctx.reply('\u200b', mainMenu);
+      await setMainMenu(ctx);
     } else if (currentStage === 'complete') {
       await ctx.reply('Вы успешно зарегистрированы!', mainMenu);
     }
@@ -147,22 +158,22 @@ export function setupHandlers(bot: Telegraf<BotContext>) {
 
     if (currentStage === 'start') {
       await ctx.reply(
-        'Добро пожаловать! Для начала работы необходимо пройти регистрацию.',
+        'Для подачи заявки на Первенство России по мас-рестлингу, пожалуйста пройдите регистрацию. ВАЖНО! Данные заполняются как в паспорте!',
         Markup.inlineKeyboard([[{ text: 'Начать регистрацию', callback_data: 'register' }]]),
       );
-      await ctx.reply('Главное меню доступно внизу:', mainMenu);
+      await setMainMenu(ctx);
     } else if (currentStage === 'first') {
       await ctx.reply(
         'Вы заполнили основные данные. Теперь необходимо внести паспортные данные спортсмена.',
         Markup.inlineKeyboard([[{ text: 'Заполнить паспорт', callback_data: 'register' }]]),
       );
-      await ctx.reply('Главное меню доступно внизу:', mainMenu);
+      await setMainMenu(ctx);
     } else if (currentStage === 'passport') {
       await ctx.reply(
         'Вам необходимо заполнить паспортные данные.',
         Markup.inlineKeyboard([[{ text: 'Заполнить паспорт', callback_data: 'passport' }]]),
       );
-      await ctx.reply('Главное меню доступно внизу:', mainMenu);
+      await setMainMenu(ctx);
     } else if (currentStage === 'complete') {
       await ctx.reply('Вы успешно зарегистрированы!', mainMenu);
     }

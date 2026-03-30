@@ -3,7 +3,7 @@ import { supabase } from '../supabase';
 import { BotContext, PassportData } from '../types/session';
 import { validators } from '../utils/validation';
 
-const backKeyboard = Markup.keyboard([['⬅️ Назад']]).resize();
+const backKeyboard = Markup.keyboard([['⬅️ Назад'], ['👤 Профиль', 'Мои заявки'], ['📊 Соревнования']]).resize();
 
 const computeAge = (birth?: string) => {
   if (!birth) return null;

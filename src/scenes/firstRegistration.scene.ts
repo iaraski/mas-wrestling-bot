@@ -3,7 +3,11 @@ import { supabase } from '../supabase';
 import { BotContext, RegistrationData } from '../types/session';
 import { validators } from '../utils/validation';
 
-const backKeyboard = Markup.keyboard([['⬅️ Назад']]).resize();
+const backKeyboard = Markup.keyboard([
+  ['⬅️ Назад'],
+  ['👤 Профиль', 'Мои заявки'],
+  ['📊 Соревнования'],
+]).resize();
 
 const sendCountries = async (ctx: BotContext) => {
   const { data: countries, error } = await supabase
