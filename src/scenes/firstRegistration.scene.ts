@@ -350,9 +350,8 @@ export const firstRegistrationScene = new Scenes.WizardScene<BotContext>(
           { onConflict: 'user_id' },
         );
 
-      await ctx.reply('Основные данные сохранены. Переходим к заполнению паспортных данных.');
       await ctx.scene.enter('passport');
-      return ctx.scene.leave();
+      return;
     } catch (err) {
       console.error('[Registration Scene] Save error:', err);
       await ctx.reply('Произошла ошибка при сохранении данных.');

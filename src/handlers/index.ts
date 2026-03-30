@@ -274,10 +274,29 @@ export function setupHandlers(bot: Telegraf<BotContext>) {
         [{ text: '⬅️ Назад к списку', callback_data: 'back_to_comps' }],
       ];
 
-      await ctx.editMessageText(message, {
-        parse_mode: 'HTML',
-        reply_markup: { inline_keyboard: buttons },
-      });
+      const previewUrl =
+        (comp as any).preview_url ||
+        (comp as any).poster_url ||
+        (comp as any).image_url ||
+        (comp as any).cover_url ||
+        (comp as any).banner_url;
+
+      if (previewUrl && typeof previewUrl === 'string') {
+        const chatId = ctx.chat?.id;
+        const messageId = (ctx.callbackQuery as any)?.message?.message_id;
+        if (chatId && messageId) {
+          await ctx.telegram.deleteMessage(chatId, messageId).catch(() => {});
+        }
+
+        await ctx.replyWithPhoto(previewUrl, {
+          caption: message,
+          parse_mode: 'HTML',
+          reply_markup: { inline_keyboard: buttons },
+        });
+        return;
+      }
+
+      await ctx.editMessageText(message, { parse_mode: 'HTML', reply_markup: { inline_keyboard: buttons } });
     } catch (err) {
       console.error('Error fetching competition info:', err);
       await ctx.reply('Ошибка при получении информации о соревновании.');
@@ -286,7 +305,12 @@ export function setupHandlers(bot: Telegraf<BotContext>) {
 
   bot.action('back_to_comps', async (ctx) => {
     await ctx.answerCbQuery();
-    // Повторяем логику вывода списка
+    const chatId = ctx.chat?.id;
+    const messageId = (ctx.callbackQuery as any)?.message?.message_id;
+    if (chatId && messageId) {
+      await ctx.telegram.deleteMessage(chatId, messageId).catch(() => {});
+    }
+
     const { data: competitions } = await supabase
       .from('competitions')
       .select('*')
@@ -294,11 +318,12 @@ export function setupHandlers(bot: Telegraf<BotContext>) {
       .order('start_date', { ascending: true });
 
     if (!competitions || competitions.length === 0) {
-      return ctx.editMessageText('На данный момент нет активных соревнований.');
+      await ctx.reply('На данный момент нет активных соревнований.');
+      return;
     }
 
     const buttons = competitions.map((c) => [Markup.button.callback(c.name, `comp_info_${c.id}`)]);
-    await ctx.editMessageText('Выберите соревнование:', Markup.inlineKeyboard(buttons));
+    await ctx.reply('Выберите соревнование:', Markup.inlineKeyboard(buttons));
   });
 
   bot.action(/^apply_comp_(.+)$/, async (ctx) => {
