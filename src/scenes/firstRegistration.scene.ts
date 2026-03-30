@@ -155,7 +155,7 @@ export const firstRegistrationScene = new Scenes.WizardScene<BotContext>(
     return ctx.wizard.next();
   },
 
-  // 7. Ввод телефона
+  // 7. Ввод Email + отправка письма подтверждения
   async (ctx) => {
     if (!ctx.message || !('text' in ctx.message)) return;
     const email = ctx.message.text.trim();
@@ -167,11 +167,163 @@ export const firstRegistrationScene = new Scenes.WizardScene<BotContext>(
 
     ctx.session.registration!.email = email;
 
-    await ctx.reply('Введите ваш номер телефона (начиная с 8, 11 цифр, без пробелов):');
+    const userId = ctx.session.supabaseUserId;
+    if (!userId) {
+      await ctx.reply('Ошибка сессии. Пожалуйста, введите /start');
+      return ctx.scene.leave();
+    }
+
+    const apiBase =
+      process.env.API_URL || process.env.VITE_API_URL || 'https://api.mas-wrestling.pro';
+    try {
+      const resp = await fetch(`${apiBase}/api/v1/auth/bot-init-email`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, user_id: userId, telegram_id: ctx.from!.id }),
+      });
+      if (!resp.ok) {
+        const txt = await resp.text();
+        console.error('[Registration Scene] bot-init-email failed:', txt);
+        await ctx.reply('Не удалось отправить письмо подтверждения. Попробуйте позже.');
+        return ctx.scene.leave();
+      }
+    } catch (e) {
+      console.error('[Registration Scene] bot-init-email error:', e);
+      await ctx.reply('Не удалось отправить письмо подтверждения. Попробуйте позже.');
+      return ctx.scene.leave();
+    }
+
+    await ctx.reply(
+      'Мы отправили письмо для подтверждения email. После подтверждения нажмите кнопку ниже.',
+      Markup.inlineKeyboard([
+        [{ text: 'Я подтвердил email', callback_data: 'email_confirmed' }],
+        [{ text: 'Отправить письмо ещё раз', callback_data: 'email_resend' }],
+        [{ text: 'Изменить email', callback_data: 'email_change' }],
+      ]),
+    );
+
     return ctx.wizard.next();
   },
 
-  // 8. Ввод ФИО тренера и сохранение
+  // 8. Проверка подтверждения email / повторная отправка / смена email
+  async (ctx) => {
+    const apiBase =
+      process.env.API_URL || process.env.VITE_API_URL || 'https://api.mas-wrestling.pro';
+    const userId = ctx.session.supabaseUserId;
+    if (!userId) {
+      await ctx.reply('Ошибка сессии. Пожалуйста, введите /start');
+      return ctx.scene.leave();
+    }
+
+    if (ctx.callbackQuery && 'data' in ctx.callbackQuery) {
+      const data = (ctx.callbackQuery as any).data as string;
+      await ctx.answerCbQuery().catch(() => {});
+
+      if (data === 'email_confirmed') {
+        try {
+          const statusResp = await fetch(
+            `${apiBase}/api/v1/auth/bot-confirmation-status?telegram_id=${ctx.from!.id}&user_id=${userId}`,
+          );
+          if (!statusResp.ok) {
+            await ctx.reply('Не удалось проверить подтверждение email. Попробуйте позже.');
+            return;
+          }
+          const status = (await statusResp.json()) as { confirmed?: boolean };
+          if (!status.confirmed) {
+            await ctx.reply(
+              'Email ещё не подтверждён. Перейдите по ссылке из письма, затем нажмите «Я подтвердил email».',
+            );
+            return;
+          }
+
+          await ctx.editMessageText('Email подтверждён.').catch(() => {});
+          await ctx.reply('Введите ваш номер телефона (начиная с 8, 11 цифр, без пробелов):');
+          return ctx.wizard.next();
+        } catch (e) {
+          console.error('[Registration Scene] confirmation-status error:', e);
+          await ctx.reply('Не удалось проверить подтверждение email. Попробуйте позже.');
+          return;
+        }
+      }
+
+      if (data === 'email_resend') {
+        const email = ctx.session.registration?.email;
+        if (!email) {
+          await ctx.reply('Email не найден. Нажмите «Изменить email» и введите заново.');
+          return;
+        }
+        try {
+          const r = await fetch(`${apiBase}/api/v1/auth/bot-resend-confirmation`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email }),
+          });
+          if (!r.ok) {
+            await ctx.reply('Не удалось отправить письмо ещё раз. Попробуйте позже.');
+            return;
+          }
+          await ctx.reply(
+            'Письмо отправлено повторно. Проверьте почту и нажмите «Я подтвердил email».',
+          );
+        } catch (e) {
+          console.error('[Registration Scene] resend-confirmation error:', e);
+          await ctx.reply('Не удалось отправить письмо ещё раз. Попробуйте позже.');
+        }
+        return;
+      }
+
+      if (data === 'email_change') {
+        ctx.session.registration!.pending_email_change = true;
+        await ctx.reply('Введите email заново:');
+        return;
+      }
+
+      return;
+    }
+
+    if (ctx.message && 'text' in ctx.message) {
+      if (!ctx.session.registration?.pending_email_change) return;
+
+      const newEmail = ctx.message.text.trim();
+      if (!validators.email(newEmail)) {
+        await ctx.reply('Пожалуйста, введите корректный Email:');
+        return;
+      }
+
+      try {
+        const r = await fetch(`${apiBase}/api/v1/auth/bot-update-email`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ new_email: newEmail, user_id: userId, telegram_id: ctx.from!.id }),
+        });
+        if (!r.ok) {
+          const txt = await r.text();
+          console.error('[Registration Scene] bot-update-email failed:', txt);
+          await ctx.reply('Не удалось обновить email. Попробуйте позже.');
+          return;
+        }
+      } catch (e) {
+        console.error('[Registration Scene] bot-update-email error:', e);
+        await ctx.reply('Не удалось обновить email. Попробуйте позже.');
+        return;
+      }
+
+      ctx.session.registration!.email = newEmail;
+      ctx.session.registration!.pending_email_change = false;
+
+      await ctx.reply(
+        'Письмо отправлено на новый email. После подтверждения нажмите кнопку ниже.',
+        Markup.inlineKeyboard([
+          [{ text: 'Я подтвердил email', callback_data: 'email_confirmed' }],
+          [{ text: 'Отправить письмо ещё раз', callback_data: 'email_resend' }],
+          [{ text: 'Изменить email', callback_data: 'email_change' }],
+        ]),
+      );
+      return;
+    }
+  },
+
+  // 9. Ввод телефона
   async (ctx) => {
     if (!ctx.message || !('text' in ctx.message)) return;
     const phone = ctx.message.text.trim();
@@ -183,11 +335,52 @@ export const firstRegistrationScene = new Scenes.WizardScene<BotContext>(
 
     ctx.session.registration!.phone = phone;
 
+    await ctx.reply('Введите пароль для веб-версии (не менее 8 символов):');
+    return ctx.wizard.next();
+  },
+
+  // 10. Ввод пароля для веб-версии
+  async (ctx) => {
+    if (!ctx.message || !('text' in ctx.message)) return;
+    const password = ctx.message.text.trim();
+    if (password.length < 8) {
+      await ctx.reply('Пароль должен содержать не менее 8 символов. Попробуйте снова:');
+      return;
+    }
+
+    const apiBase =
+      process.env.API_URL || process.env.VITE_API_URL || 'https://api.mas-wrestling.pro';
+    const userId = ctx.session.supabaseUserId;
+    if (!userId) {
+      await ctx.reply('Ошибка сессии. Пожалуйста, введите /start');
+      return ctx.scene.leave();
+    }
+
+    try {
+      const r = await fetch(`${apiBase}/api/v1/auth/bot-set-password`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password, user_id: userId, telegram_id: ctx.from!.id }),
+      });
+      if (!r.ok) {
+        const txt = await r.text();
+        console.error('[Registration Scene] bot-set-password failed:', txt);
+        await ctx.reply(
+          'Не удалось установить пароль. Убедитесь, что email подтвержден, и попробуйте снова.',
+        );
+        return;
+      }
+    } catch (e) {
+      console.error('[Registration Scene] bot-set-password error:', e);
+      await ctx.reply('Не удалось установить пароль. Попробуйте позже.');
+      return ctx.scene.leave();
+    }
+
     await ctx.reply('Введите ФИО вашего тренера полностью (три слова через пробел):');
     return ctx.wizard.next();
   },
 
-  // 9. Сохранение данных
+  // 11. Сохранение данных
   async (ctx) => {
     if (!ctx.message || !('text' in ctx.message)) {
       console.log('[Registration Scene] Step 8: No text message received');
@@ -260,6 +453,10 @@ export const firstRegistrationScene = new Scenes.WizardScene<BotContext>(
       console.log('[Registration Scene] All data saved successfully.');
 
       await ctx.reply(
+        'Пароль для веб-версии установлен. После подтверждения email вы сможете войти на сайт.',
+      );
+
+      await ctx.reply(
         'Основные данные сохранены! Желаете заполнить паспортные данные прямо сейчас?',
         {
           reply_markup: {
@@ -278,7 +475,7 @@ export const firstRegistrationScene = new Scenes.WizardScene<BotContext>(
     }
   },
 
-  // 10. Обработка выбора продолжения
+  // 12. Обработка выбора продолжения
   async (ctx) => {
     if (!ctx.callbackQuery || !('data' in ctx.callbackQuery)) return;
     const cbQuery = ctx.callbackQuery as any;

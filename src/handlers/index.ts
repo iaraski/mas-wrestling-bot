@@ -4,6 +4,66 @@ import { BotContext } from '../types/session';
 import { checkUserStage } from '../utils/user';
 
 export function setupHandlers(bot: Telegraf<BotContext>) {
+  const consentText =
+    'Добро пожаловать в онлайн систему мас-рестлинга.\n' +
+    'Перед началом регистрации вашего личного кабинета, пожалуйста подтвердите согласие на обработку персональных данных.\n' +
+    'https://disk.yandex.ru/i/pH_TKjczEVaCpg';
+
+  const mainMenu = Markup.keyboard([['👤 Профиль', 'Мои заявки'], ['📊 Соревнования']]).resize();
+
+  const ensureConsent = async (ctx: BotContext) => {
+    const currentStage = await checkUserStage(ctx);
+    if (!currentStage) {
+      await ctx.reply('Произошла ошибка при инициализации. Попробуйте позже.');
+      return false;
+    }
+
+    const userId = ctx.session.supabaseUserId;
+    if (!userId) {
+      await ctx.reply('Произошла ошибка при инициализации. Попробуйте позже.');
+      return false;
+    }
+
+    const { data, error } = await supabase
+      .from('registrations')
+      .select('consent_accepted')
+      .eq('user_id', userId)
+      .maybeSingle();
+
+    if (error) {
+      console.error('[Consent] Error reading consent_accepted:', error);
+      await ctx.reply(
+        consentText,
+        Markup.inlineKeyboard([[{ text: 'Подтверждаю', callback_data: 'consent_accept' }]]),
+      );
+      return false;
+    }
+
+    if (!data?.consent_accepted) {
+      await ctx.reply(
+        consentText,
+        Markup.inlineKeyboard([[{ text: 'Подтверждаю', callback_data: 'consent_accept' }]]),
+      );
+      return false;
+    }
+
+    return true;
+  };
+
+  bot.use(async (ctx, next) => {
+    const msgText = ctx.message && 'text' in ctx.message ? ctx.message.text : undefined;
+    const cbData =
+      ctx.callbackQuery && 'data' in ctx.callbackQuery ? ctx.callbackQuery.data : undefined;
+
+    if (msgText === '/start' || cbData === 'consent_accept') {
+      return next();
+    }
+
+    const ok = await ensureConsent(ctx);
+    if (!ok) return;
+    return next();
+  });
+
   bot.start(async (ctx) => {
     // Принудительно выходим из любой активной сцены при /start
     await ctx.scene.leave().catch(() => {});
@@ -15,7 +75,57 @@ export function setupHandlers(bot: Telegraf<BotContext>) {
       return ctx.reply('Произошла ошибка при инициализации. Попробуйте позже.');
     }
 
-    const mainMenu = Markup.keyboard([['👤 Профиль', 'Мои заявки'], ['📊 Соревнования']]).resize();
+    const ok = await ensureConsent(ctx);
+    if (!ok) return;
+
+    if (currentStage === 'start') {
+      await ctx.reply(
+        'Добро пожаловать! Для начала работы необходимо пройти регистрацию.',
+        Markup.inlineKeyboard([[{ text: 'Начать регистрацию', callback_data: 'register' }]]),
+      );
+      await ctx.reply('Главное меню доступно внизу:', mainMenu);
+    } else if (currentStage === 'first') {
+      await ctx.reply(
+        'Вы заполнили основные данные. Теперь необходимо внести паспортные данные спортсмена.',
+        Markup.inlineKeyboard([[{ text: 'Заполнить паспорт', callback_data: 'register' }]]),
+      );
+      await ctx.reply('Главное меню доступно внизу:', mainMenu);
+    } else if (currentStage === 'passport') {
+      await ctx.reply(
+        'Вам необходимо заполнить паспортные данные.',
+        Markup.inlineKeyboard([[{ text: 'Заполнить паспорт', callback_data: 'passport' }]]),
+      );
+      await ctx.reply('Главное меню доступно внизу:', mainMenu);
+    } else if (currentStage === 'complete') {
+      await ctx.reply('Вы успешно зарегистрированы!', mainMenu);
+    }
+  });
+
+  bot.action('consent_accept', async (ctx) => {
+    await ctx.answerCbQuery().catch(() => {});
+    const currentStage = await checkUserStage(ctx);
+    if (!currentStage) {
+      await ctx.reply('Произошла ошибка при инициализации. Попробуйте позже.');
+      return;
+    }
+
+    const userId = ctx.session.supabaseUserId;
+    if (!userId) {
+      await ctx.reply('Произошла ошибка при инициализации. Попробуйте позже.');
+      return;
+    }
+
+    const { error } = await supabase
+      .from('registrations')
+      .upsert({ user_id: userId, consent_accepted: true }, { onConflict: 'user_id' });
+
+    if (error) {
+      console.error('[Consent] Failed to save consent:', error);
+      await ctx.reply('Ошибка при сохранении согласия. Попробуйте ещё раз.');
+      return;
+    }
+
+    await ctx.editMessageText('Спасибо! Согласие принято.').catch(() => {});
 
     if (currentStage === 'start') {
       await ctx.reply(
