@@ -3,7 +3,28 @@ import { supabase } from '../supabase';
 import { BotContext, PassportData } from '../types/session';
 import { validators } from '../utils/validation';
 
-const backKeyboard = Markup.keyboard([['⬅️ Назад'], ['👤 Профиль', 'Мои заявки'], ['📊 Соревнования']]).resize();
+const withBack = (data: string) =>
+  Markup.inlineKeyboard([[Markup.button.callback('⬅️ Назад', data)]]);
+
+const promptSeries = async (ctx: BotContext) => {
+  await ctx.reply('Введите серию паспорта (4 цифры):', withBack('pass_cancel'));
+};
+
+const promptNumber = async (ctx: BotContext) => {
+  await ctx.reply('Введите номер паспорта (6 цифр):', withBack('pass_back_series'));
+};
+
+const promptIssued = async (ctx: BotContext) => {
+  await ctx.reply('Кем выдан:', withBack('pass_back_number'));
+};
+
+const promptIssueDate = async (ctx: BotContext) => {
+  await ctx.reply('Дата выдачи (ДД.ММ.ГГГГ):', withBack('pass_back_issued'));
+};
+
+const promptBirthDate = async (ctx: BotContext) => {
+  await ctx.reply('Дата рождения (ДД.ММ.ГГГГ):', withBack('pass_back_issue_date'));
+};
 
 const computeAge = (birth?: string) => {
   if (!birth) return null;
@@ -66,86 +87,107 @@ export const passportScene = new Scenes.WizardScene<BotContext>(
       }
     }
 
-    await ctx.reply('Введите серию паспорта (4 цифры):', backKeyboard);
+    await promptSeries(ctx);
     return ctx.wizard.next();
   },
 
   // 1. Номер
   async (ctx) => {
+    if (ctx.callbackQuery && 'data' in ctx.callbackQuery) {
+      if (String(ctx.callbackQuery.data) === 'pass_cancel') {
+        await ctx.answerCbQuery().catch(() => {});
+        await ctx.deleteMessage().catch(() => {});
+        return ctx.scene.leave();
+      }
+      return;
+    }
+
     if (!ctx.message || !('text' in ctx.message)) return;
     const series = ctx.message.text.trim();
-    if (series === '⬅️ Назад') {
-      await ctx.reply('Ввод паспортных данных отменен.');
-      return ctx.scene.leave();
-    }
     if (!validators.passportSeries(series)) {
       await ctx.reply('Пожалуйста, введите серию паспорта корректно (4 цифры):');
       return;
     }
     ctx.session.passport!.series = series;
-    await ctx.reply('Введите номер паспорта (6 цифр):', backKeyboard);
+    await promptNumber(ctx);
     return ctx.wizard.next();
   },
 
   // 2. Кем выдан
   async (ctx) => {
+    if (ctx.callbackQuery && 'data' in ctx.callbackQuery) {
+      if (String(ctx.callbackQuery.data) === 'pass_back_series') {
+        await ctx.answerCbQuery().catch(() => {});
+        ctx.wizard.selectStep(0);
+        await promptSeries(ctx);
+      }
+      return;
+    }
+
     if (!ctx.message || !('text' in ctx.message)) return;
     const number = ctx.message.text.trim();
-    if (number === '⬅️ Назад') {
-      ctx.wizard.selectStep(0);
-      await ctx.reply('Введите серию паспорта (4 цифры):', backKeyboard);
-      return ctx.wizard.next();
-    }
     if (!validators.passportNumber(number)) {
       await ctx.reply('Пожалуйста, введите номер паспорта корректно (6 цифр):');
       return;
     }
     ctx.session.passport!.number = number;
-    await ctx.reply('Кем выдан:', backKeyboard);
+    await promptIssued(ctx);
     return ctx.wizard.next();
   },
 
   // 3. Дата выдачи
   async (ctx) => {
+    if (ctx.callbackQuery && 'data' in ctx.callbackQuery) {
+      if (String(ctx.callbackQuery.data) === 'pass_back_number') {
+        await ctx.answerCbQuery().catch(() => {});
+        ctx.wizard.selectStep(1);
+        await promptNumber(ctx);
+      }
+      return;
+    }
+
     if (!ctx.message || !('text' in ctx.message)) return;
     const issued = ctx.message.text.trim();
-    if (issued === '⬅️ Назад') {
-      ctx.wizard.selectStep(1);
-      await ctx.reply('Введите номер паспорта (6 цифр):', backKeyboard);
-      return ctx.wizard.next();
-    }
     ctx.session.passport!.issued = issued;
-    await ctx.reply('Дата выдачи (ДД.ММ.ГГГГ):', backKeyboard);
+    await promptIssueDate(ctx);
     return ctx.wizard.next();
   },
 
   // 4. Дата рождения
   async (ctx) => {
+    if (ctx.callbackQuery && 'data' in ctx.callbackQuery) {
+      if (String(ctx.callbackQuery.data) === 'pass_back_issued') {
+        await ctx.answerCbQuery().catch(() => {});
+        ctx.wizard.selectStep(2);
+        await promptIssued(ctx);
+      }
+      return;
+    }
+
     if (!ctx.message || !('text' in ctx.message)) return;
     const issueDate = ctx.message.text.trim();
-    if (issueDate === '⬅️ Назад') {
-      ctx.wizard.selectStep(2);
-      await ctx.reply('Кем выдан:', backKeyboard);
-      return ctx.wizard.next();
-    }
     if (!validators.date(issueDate)) {
       await ctx.reply('Пожалуйста, введите дату выдачи корректно (ДД.ММ.ГГГГ):');
       return;
     }
     ctx.session.passport!.issue_date = issueDate;
-    await ctx.reply('Дата рождения (ДД.ММ.ГГГГ):', backKeyboard);
+    await promptBirthDate(ctx);
     return ctx.wizard.next();
   },
 
   // 5. Пол
   async (ctx) => {
+    if (ctx.callbackQuery && 'data' in ctx.callbackQuery) {
+      if (String(ctx.callbackQuery.data) === 'pass_back_issue_date') {
+        await ctx.answerCbQuery().catch(() => {});
+        ctx.wizard.selectStep(3);
+        await promptIssueDate(ctx);
+      }
+      return;
+    }
+
     if (!ctx.message || !('text' in ctx.message)) return;
     const birthDate = ctx.message.text.trim();
-    if (birthDate === '⬅️ Назад') {
-      ctx.wizard.selectStep(3);
-      await ctx.reply('Дата выдачи (ДД.ММ.ГГГГ):', backKeyboard);
-      return ctx.wizard.next();
-    }
     if (!validators.date(birthDate)) {
       await ctx.reply('Пожалуйста, введите дату рождения корректно (ДД.ММ.ГГГГ):');
       return;
@@ -173,7 +215,7 @@ export const passportScene = new Scenes.WizardScene<BotContext>(
 
     if (data === 'back_to_birth') {
       ctx.wizard.selectStep(4);
-      await ctx.reply('Дата рождения (ДД.ММ.ГГГГ):', backKeyboard);
+      await promptBirthDate(ctx);
       return ctx.wizard.next();
     }
 
@@ -211,16 +253,22 @@ export const passportScene = new Scenes.WizardScene<BotContext>(
     ctx.session.passport!.rank = rank;
     await ctx.editMessageText(`Разряд: ${rank}`).catch(() => {});
 
-    await ctx.reply('Загрузите фото 3x4', backKeyboard);
+    await ctx.reply('Загрузите фото 3x4', withBack('pass_back_to_rank'));
     return ctx.wizard.next();
   },
 
   // 8. Скан паспорта (фото или PDF)
   async (ctx) => {
-    if (ctx.message && 'text' in ctx.message && ctx.message.text.trim() === '⬅️ Назад') {
-      ctx.wizard.selectStep(6);
-      await ctx.reply('Выберите спортивный разряд:', buildRanksKeyboard(ctx.session.passport?.birth));
-      return ctx.wizard.next();
+    if (ctx.callbackQuery && 'data' in ctx.callbackQuery) {
+      if (String(ctx.callbackQuery.data) === 'pass_back_to_rank') {
+        await ctx.answerCbQuery().catch(() => {});
+        ctx.wizard.selectStep(7);
+        await ctx.reply(
+          'Выберите спортивный разряд:',
+          buildRanksKeyboard(ctx.session.passport?.birth),
+        );
+      }
+      return;
     }
 
     if (!ctx.message || !('photo' in ctx.message)) {
@@ -231,16 +279,19 @@ export const passportScene = new Scenes.WizardScene<BotContext>(
     const photo = ctx.message.photo[ctx.message.photo.length - 1];
     ctx.session.passport!.photo_url = photo.file_id;
 
-    await ctx.reply('Загрузите скан паспорта (фото или PDF):', backKeyboard);
+    await ctx.reply('Загрузите скан паспорта (фото или PDF):', withBack('pass_back_to_photo'));
     return ctx.wizard.next();
   },
 
   // 9. Сохранение
   async (ctx) => {
-    if (ctx.message && 'text' in ctx.message && ctx.message.text.trim() === '⬅️ Назад') {
-      ctx.wizard.selectStep(7);
-      await ctx.reply('Загрузите фото 3x4', backKeyboard);
-      return ctx.wizard.next();
+    if (ctx.callbackQuery && 'data' in ctx.callbackQuery) {
+      if (String(ctx.callbackQuery.data) === 'pass_back_to_photo') {
+        await ctx.answerCbQuery().catch(() => {});
+        ctx.wizard.selectStep(7);
+        await ctx.reply('Загрузите фото 3x4', withBack('pass_back_to_rank'));
+      }
+      return;
     }
 
     if (!ctx.message) return;
