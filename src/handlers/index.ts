@@ -246,6 +246,10 @@ export function setupHandlers(bot: Telegraf<BotContext>) {
         comp.name.toLowerCase().includes('первенств') &&
         comp.name.includes('2026');
 
+      const pr2026CompId = (process.env.PR2026_COMP_ID || '').trim();
+      const isPr2026Target =
+        (pr2026CompId && String(comp.id) === pr2026CompId) || (!pr2026CompId && isRussiaChamp2026);
+
       let message = `<b>🏆 ${escapeHtml(comp.name)}</b>\n\n`;
       message += `📅 <b>Начало:</b> ${new Date(comp.start_date).toLocaleDateString('ru-RU')}\n`;
       if (comp.mandate_start_date) {
@@ -261,7 +265,7 @@ export function setupHandlers(bot: Telegraf<BotContext>) {
       }
 
       const pr2026Address = (process.env.PR2026_ADDRESS || '').trim();
-      if (isRussiaChamp2026 && pr2026Address) {
+      if (isPr2026Target && pr2026Address) {
         message += `🏙 <b>Место:</b> ${escapeHtml(pr2026Address)}\n`;
       } else if (comp.city) {
         message += `🏙 <b>Место:</b> г. ${escapeHtml(comp.city)}`;
@@ -282,7 +286,7 @@ export function setupHandlers(bot: Telegraf<BotContext>) {
       const buttons = [
         [
           {
-            text: isRussiaChamp2026
+            text: isPr2026Target
               ? '📝 Подать заявку на Первенство России 2026'
               : '📝 Подать заявку',
             callback_data: `apply_comp_${comp.id}`,

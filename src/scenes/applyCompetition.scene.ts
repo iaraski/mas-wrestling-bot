@@ -154,7 +154,10 @@ export const applyCompetitionScene = new Scenes.WizardScene<BotContext>(
         const compName = String((ctx.wizard.state as any).compName || '');
         const isRussiaChamp2026 =
           compName.toLowerCase().includes('первенств') && compName.includes('2026');
-        if (isRussiaChamp2026) {
+        const pr2026CompId = (process.env.PR2026_COMP_ID || '').trim();
+        const isPr2026Target =
+          (pr2026CompId && String(compId) === pr2026CompId) || (!pr2026CompId && isRussiaChamp2026);
+        if (isPr2026Target) {
           await ctx.reply(
             'Мандатная комиссия пройдет 24 апреля и начнется с верификации паспорта спортсмена (ваших загруженных данных).\nТолько после этого вы будете допущены к взвешиванию.',
           );
