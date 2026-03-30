@@ -7,7 +7,7 @@ export function setupHandlers(bot: Telegraf<BotContext>) {
   const consentText =
     'Добро пожаловать в онлайн систему мас-рестлинга.\n' +
     'Перед началом регистрации вашего личного кабинета, пожалуйста подтвердите согласие на обработку персональных данных.\n' +
-    'https://disk.yandex.ru/i/pH_TKjczEVaCpg';
+    'https://docs.google.com/document/d/1pkV6DiFigJ_jG-zkH_fsXpr-KgGu-2ibxIC9gNvJv-Y/edit?usp=sharing';
 
   const mainMenu = Markup.keyboard([['👤 Профиль', 'Мои заявки'], ['📊 Соревнования']]).resize();
 

@@ -186,7 +186,7 @@ export const passportScene = new Scenes.WizardScene<BotContext>(
     return ctx.wizard.next();
   },
 
-  // 7. Фото
+  // 7. Фото 3x4
   async (ctx) => {
     if (!ctx.callbackQuery || !('data' in ctx.callbackQuery)) return;
     const data = String(ctx.callbackQuery.data);
@@ -215,7 +215,7 @@ export const passportScene = new Scenes.WizardScene<BotContext>(
     return ctx.wizard.next();
   },
 
-  // 8. Сохранение
+  // 8. Скан паспорта (фото или PDF)
   async (ctx) => {
     if (ctx.message && 'text' in ctx.message && ctx.message.text.trim() === '⬅️ Назад') {
       ctx.wizard.selectStep(6);
@@ -230,6 +230,29 @@ export const passportScene = new Scenes.WizardScene<BotContext>(
 
     const photo = ctx.message.photo[ctx.message.photo.length - 1];
     ctx.session.passport!.photo_url = photo.file_id;
+
+    await ctx.reply('Загрузите скан паспорта (фото или PDF):', backKeyboard);
+    return ctx.wizard.next();
+  },
+
+  // 9. Сохранение
+  async (ctx) => {
+    if (ctx.message && 'text' in ctx.message && ctx.message.text.trim() === '⬅️ Назад') {
+      ctx.wizard.selectStep(7);
+      await ctx.reply('Загрузите фото 3x4', backKeyboard);
+      return ctx.wizard.next();
+    }
+
+    if (!ctx.message) return;
+    if ('photo' in ctx.message) {
+      const scan = ctx.message.photo[ctx.message.photo.length - 1];
+      ctx.session.passport!.passport_scan_url = scan.file_id;
+    } else if ('document' in ctx.message) {
+      ctx.session.passport!.passport_scan_url = ctx.message.document.file_id;
+    } else {
+      await ctx.reply('Пожалуйста, отправьте скан паспорта (фото или PDF).');
+      return;
+    }
 
     const data = ctx.session.passport!;
     const userId = ctx.session.supabaseUserId!;
@@ -263,6 +286,7 @@ export const passportScene = new Scenes.WizardScene<BotContext>(
           gender: data.gender,
           rank: data.rank,
           photo_url: data.photo_url,
+          passport_scan_url: data.passport_scan_url,
         },
         { onConflict: 'athlete_id' },
       );
@@ -287,4 +311,3 @@ export const passportScene = new Scenes.WizardScene<BotContext>(
     return ctx.scene.leave();
   },
 );
-
