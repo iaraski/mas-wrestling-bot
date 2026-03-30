@@ -1,12 +1,11 @@
 import { supabase } from '../supabase';
 import { BotContext } from '../types/session';
 
-// Функция для получения или создания пользователя и проверки его статуса
 export async function checkUserStage(ctx: BotContext) {
-  const telegramId = ctx.from!.id;
+  const telegramId = ctx.from?.id;
+  if (!telegramId) return null;
 
   try {
-    // 1. Всегда ищем актуальный ID пользователя по telegram_id
     let { data: user, error: userError } = await supabase
       .from('users')
       .select('id')
@@ -34,7 +33,6 @@ export async function checkUserStage(ctx: BotContext) {
 
     ctx.session.supabaseUserId = user!.id;
 
-    // 2. Ищем статус регистрации
     let { data: registration, error: regError } = await supabase
       .from('registrations')
       .select('stage')
@@ -44,23 +42,6 @@ export async function checkUserStage(ctx: BotContext) {
     if (regError) {
       console.error('[checkUserStage] Error fetching registration:', regError);
       return 'start';
-    }
-
-    // 3. Проверяем наличие профиля, если статус не 'start'
-    if (registration && registration.stage !== 'start') {
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('id')
-        .eq('user_id', user!.id)
-        .maybeSingle();
-
-      if (!profile) {
-        console.log(
-          `[checkUserStage] Profile missing for user ${user!.id}, resetting stage to 'start'`,
-        );
-        await supabase.from('registrations').update({ stage: 'start' }).eq('user_id', user!.id);
-        return 'start';
-      }
     }
 
     if (!registration) {
@@ -83,3 +64,4 @@ export async function checkUserStage(ctx: BotContext) {
     return null;
   }
 }
+

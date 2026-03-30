@@ -16,22 +16,22 @@ export function setupHandlers(bot: Telegraf<BotContext>) {
 
     if (currentStage === 'start') {
       await ctx.reply(
-        'Добро пожаловать! Для начала работы необходимо пройти регистрацию.',
+        'Для подачи заявки на Первенство России по мас-рестлингу, пожалуйста пройдите регистрацию. ВАЖНО! Данные заполняются как в паспорте!',
         Markup.inlineKeyboard([[{ text: 'Начать регистрацию', callback_data: 'register' }]]),
       );
-      await ctx.reply('Главное меню доступно внизу:', mainMenu);
+      await ctx.reply('\u200b', mainMenu);
     } else if (currentStage === 'first') {
       await ctx.reply(
         'Вы заполнили основные данные. Теперь необходимо внести паспортные данные спортсмена.',
         Markup.inlineKeyboard([[{ text: 'Заполнить паспорт', callback_data: 'register' }]]),
       );
-      await ctx.reply('Главное меню доступно внизу:', mainMenu);
+      await ctx.reply('\u200b', mainMenu);
     } else if (currentStage === 'passport') {
       await ctx.reply(
         'Вам необходимо заполнить паспортные данные.',
         Markup.inlineKeyboard([[{ text: 'Заполнить паспорт', callback_data: 'passport' }]]),
       );
-      await ctx.reply('Главное меню доступно внизу:', mainMenu);
+      await ctx.reply('\u200b', mainMenu);
     } else if (currentStage === 'complete') {
       await ctx.reply('Вы успешно зарегистрированы!', mainMenu);
     }
