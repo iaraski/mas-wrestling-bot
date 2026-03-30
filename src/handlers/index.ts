@@ -318,6 +318,7 @@ export function setupHandlers(bot: Telegraf<BotContext>) {
     if (registration?.stage !== 'complete') {
       return ctx.reply(
         'Для подачи заявки необходимо полностью заполнить профиль и паспортные данные.',
+        Markup.inlineKeyboard([[{ text: '⚠️ Дозаполнить профиль', callback_data: 'register' }]]),
       );
     }
 

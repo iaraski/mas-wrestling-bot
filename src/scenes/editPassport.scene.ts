@@ -58,6 +58,11 @@ export const editPassportScene = new Scenes.WizardScene<BotContext>(
     // Убираем кнопки выбора поля
     await ctx.editMessageText(`Выбрано: ${actionText}`).catch(() => {});
 
+    const menuMessageId = cbQuery.message?.message_id;
+    if (menuMessageId) {
+      (ctx.wizard.state as any).menuMessageId = menuMessageId;
+    }
+
     (ctx.wizard.state as any).editAction = action;
 
     const prompts: Record<string, string> = {
@@ -73,7 +78,7 @@ export const editPassportScene = new Scenes.WizardScene<BotContext>(
     };
 
     if (action === 'edit_pass_gender') {
-      await ctx.reply(
+      const promptMsg: any = await ctx.reply(
         prompts[action],
         Markup.inlineKeyboard([
           [
@@ -83,11 +88,17 @@ export const editPassportScene = new Scenes.WizardScene<BotContext>(
           [Markup.button.callback('❌ Отмена', 'cancel_input')],
         ]),
       );
+      if (promptMsg?.message_id) {
+        (ctx.wizard.state as any).promptMessageId = promptMsg.message_id;
+      }
     } else {
-      await ctx.reply(
+      const promptMsg: any = await ctx.reply(
         prompts[action],
         Markup.inlineKeyboard([[Markup.button.callback('❌ Отмена', 'cancel_input')]]),
       );
+      if (promptMsg?.message_id) {
+        (ctx.wizard.state as any).promptMessageId = promptMsg.message_id;
+      }
     }
     return ctx.wizard.next();
   },
@@ -97,17 +108,19 @@ export const editPassportScene = new Scenes.WizardScene<BotContext>(
     if (ctx.callbackQuery && 'data' in ctx.callbackQuery) {
       if ((ctx.callbackQuery as any).data === 'cancel_input') {
         await ctx.answerCbQuery();
-        const messageId = (ctx.callbackQuery as any)?.message?.message_id;
-        if (ctx.chat?.id && messageId) {
-          await ctx.telegram.deleteMessage(ctx.chat.id, messageId).catch(async () => {
+        const chatId = ctx.chat?.id;
+        const promptMessageId =
+          (ctx.callbackQuery as any)?.message?.message_id || (ctx.wizard.state as any)?.promptMessageId;
+        const menuMessageId = (ctx.wizard.state as any)?.menuMessageId;
+
+        if (chatId && promptMessageId) {
+          await ctx.telegram.deleteMessage(chatId, promptMessageId).catch(async () => {
             await ctx.editMessageReplyMarkup(undefined).catch(() => {});
             await ctx.editMessageText(' ').catch(() => {});
           });
-        } else {
-          await ctx.deleteMessage().catch(async () => {
-            await ctx.editMessageReplyMarkup(undefined).catch(() => {});
-            await ctx.editMessageText(' ').catch(() => {});
-          });
+        }
+        if (chatId && menuMessageId && menuMessageId !== promptMessageId) {
+          await ctx.telegram.deleteMessage(chatId, menuMessageId).catch(() => {});
         }
         return ctx.scene.leave();
       }
