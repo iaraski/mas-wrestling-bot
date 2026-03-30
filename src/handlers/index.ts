@@ -115,14 +115,32 @@ export function setupHandlers(bot: Telegraf<BotContext>) {
       return;
     }
 
-    const { error } = await supabase
+    // Обновляем существующую запись; если ее нет — создаем со stage='start'
+    const { data: existing } = await supabase
       .from('registrations')
-      .upsert({ user_id: userId, consent_accepted: true }, { onConflict: 'user_id' });
+      .select('stage')
+      .eq('user_id', userId)
+      .maybeSingle();
 
-    if (error) {
-      console.error('[Consent] Failed to save consent:', error);
-      await ctx.reply('Ошибка при сохранении согласия. Попробуйте ещё раз.');
-      return;
+    if (existing) {
+      const { error } = await supabase
+        .from('registrations')
+        .update({ consent_accepted: true })
+        .eq('user_id', userId);
+      if (error) {
+        console.error('[Consent] Failed to update consent:', error);
+        await ctx.reply('Ошибка при сохранении согласия. Попробуйте ещё раз.');
+        return;
+      }
+    } else {
+      const { error } = await supabase
+        .from('registrations')
+        .insert({ user_id: userId, stage: 'start', consent_accepted: true });
+      if (error) {
+        console.error('[Consent] Failed to insert consent:', error);
+        await ctx.reply('Ошибка при сохранении согласия. Попробуйте ещё раз.');
+        return;
+      }
     }
 
     await ctx.editMessageText('Спасибо! Согласие принято.').catch(() => {});
