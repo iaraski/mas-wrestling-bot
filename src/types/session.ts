@@ -12,7 +12,9 @@ export interface RegistrationData {
   coach?: string;
   coach_name?: string;
   email?: string;
+  pending_email_change?: boolean;
   phone?: string;
+  web_password?: string;
 }
 
 export interface PassportData {

@@ -62,12 +62,22 @@ export const editProfileScene = new Scenes.WizardScene<BotContext>(
       edit_city: 'Введите новый населенный пункт (город/село):',
     };
 
-    await ctx.reply(prompts[action]);
+    await ctx.reply(prompts[action], Markup.inlineKeyboard([
+      [Markup.button.callback('❌ Отмена', 'cancel_input')]
+    ]));
     return ctx.wizard.next();
   },
 
   // 3. Сохранение изменений
   async (ctx) => {
+    if (ctx.callbackQuery && 'data' in ctx.callbackQuery) {
+      if ((ctx.callbackQuery as any).data === 'cancel_input') {
+        await ctx.answerCbQuery();
+        await ctx.editMessageText('Редактирование отменено.').catch(() => {});
+        return ctx.scene.leave();
+      }
+    }
+
     if (!ctx.message || !('text' in ctx.message)) return;
     const newValue = ctx.message.text.trim();
     const action = (ctx.wizard.state as any).editAction;
