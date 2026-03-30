@@ -13,7 +13,12 @@ import { BotContext } from './types/session';
 
 dotenv.config();
 
-const bot = new Telegraf<BotContext>(process.env.BOT_TOKEN!);
+const token = process.env.BOT_TOKEN;
+if (!token) {
+  throw new Error('BOT_TOKEN is required');
+}
+
+const bot = new Telegraf<BotContext>(token);
 
 // 1. Сцены
 const stage = new Scenes.Stage<BotContext>([
@@ -33,6 +38,25 @@ bot.use(stage.middleware()); // Потом сцены
 // 3. Обработчики
 setupHandlers(bot);
 
+bot.catch(async (err, ctx) => {
+  console.error('[Bot] Unhandled error:', err);
+  try {
+    await ctx.reply('Произошла ошибка. Попробуйте позже.');
+  } catch {}
+});
+
+process.on('unhandledRejection', (reason) => {
+  console.error('[Process] Unhandled rejection:', reason);
+});
+
+process.on('uncaughtException', (error) => {
+  console.error('[Process] Uncaught exception:', error);
+  process.exit(1);
+});
+
 // Запуск
 bot.launch();
 console.log('BOT STARTED');
+
+process.once('SIGINT', () => bot.stop('SIGINT'));
+process.once('SIGTERM', () => bot.stop('SIGTERM'));
