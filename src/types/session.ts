@@ -7,6 +7,7 @@ export interface RegistrationData {
   district_id?: string;
   region?: string;
   region_id?: string;
+  city?: string;
   full_name?: string;
   coach?: string;
   coach_name?: string;
@@ -23,6 +24,7 @@ export interface PassportData {
   rank?: string;
   gender?: string;
   photo_url?: string;
+  passport_scan_url?: string;
 }
 
 export interface SessionData extends Scenes.WizardSessionData {

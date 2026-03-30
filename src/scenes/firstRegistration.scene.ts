@@ -1,28 +1,70 @@
 import { Markup, Scenes } from 'telegraf';
 import { supabase } from '../supabase';
 import { BotContext, RegistrationData } from '../types/session';
+import { validators } from '../utils/validation';
 
-const isValidEmail = (email: string) =>
-  /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim().toLowerCase());
+const backKeyboard = Markup.keyboard([['⬅️ Назад']]).resize();
 
-const normalizePhone = (phone: string) => phone.replace(/[^\d+]/g, '');
+const sendCountries = async (ctx: BotContext) => {
+  const { data: countries, error } = await supabase
+    .from('locations')
+    .select('id, name')
+    .eq('type', 'country')
+    .eq('name', 'Россия');
 
-const isValidPhone = (phone: string) => {
-  const normalized = normalizePhone(phone);
-  const digits = normalized.replace(/[^\d]/g, '');
-  return digits.length >= 10 && digits.length <= 15;
+  if (error || !countries || countries.length === 0) {
+    await ctx.reply('Ошибка при получении списка стран.');
+    return false;
+  }
+
+  const buttons = countries.map((c) => Markup.button.callback(c.name, `country_${c.id}`));
+  await ctx.reply('Выберите страну:', Markup.inlineKeyboard(buttons, { columns: 1 }));
+  return true;
+};
+
+const sendDistricts = async (ctx: BotContext, countryId: string) => {
+  const { data: districts, error } = await supabase
+    .from('locations')
+    .select('id, name')
+    .eq('parent_id', countryId)
+    .eq('type', 'district');
+
+  if (error || !districts || districts.length === 0) {
+    await ctx.reply('Ошибка при получении федеральных округов.');
+    return false;
+  }
+
+  const buttons = districts.map((d) => Markup.button.callback(d.name, `district_${d.id}`));
+  buttons.push(Markup.button.callback('⬅️ Назад', 'back_to_country'));
+  await ctx.reply('Выберите федеральный округ:', Markup.inlineKeyboard(buttons, { columns: 1 }));
+  return true;
+};
+
+const sendRegions = async (ctx: BotContext, districtId: string) => {
+  const { data: regions, error } = await supabase
+    .from('locations')
+    .select('id, name')
+    .eq('parent_id', districtId)
+    .eq('type', 'region');
+
+  if (error || !regions || regions.length === 0) {
+    await ctx.reply('Ошибка при получении регионов.');
+    return false;
+  }
+
+  const buttons = regions.map((r) => Markup.button.callback(r.name, `region_${r.id}`));
+  buttons.push(Markup.button.callback('⬅️ Назад', 'back_to_district'));
+  await ctx.reply('Выберите регион:', Markup.inlineKeyboard(buttons, { columns: 2 }));
+  return true;
 };
 
 export const firstRegistrationScene = new Scenes.WizardScene<BotContext>(
   'first-registration',
 
-  // 0. Сброс/старт
-
-  // 1. Выбор страны
+  // 0. Старт
   async (ctx) => {
     ctx.session.registration = {} as RegistrationData;
 
-    // Всегда получаем актуальный supabaseUserId по telegram_id при входе в сцену
     const { data: user, error: userError } = await supabase
       .from('users')
       .select('id')
@@ -37,247 +79,195 @@ export const firstRegistrationScene = new Scenes.WizardScene<BotContext>(
 
     ctx.session.supabaseUserId = user.id;
 
-    // Получаем страны (только Россия по ТЗ)
-    const { data: countries, error } = await supabase
-      .from('locations')
-      .select('id, name')
-      .eq('type', 'country')
-      .eq('name', 'Россия');
+    const ok = await sendCountries(ctx);
+    if (!ok) return ctx.scene.leave();
+    return ctx.wizard.next();
+  },
 
-    if (error || !countries || countries.length === 0) {
-      await ctx.reply('Ошибка при получении списка стран.');
-      return ctx.scene.leave();
-    }
+  // 1. Выбор страны
+  async (ctx) => {
+    if (!ctx.callbackQuery || !('data' in ctx.callbackQuery)) return;
+    const cbQuery = ctx.callbackQuery as any;
+    const countryId = cbQuery.data.replace('country_', '');
+    const countryName = cbQuery.message?.reply_markup?.inline_keyboard
+      ?.flat()
+      .find((b: any) => b.callback_data === cbQuery.data)?.text;
 
-    const buttons = countries.map((c) => Markup.button.callback(c.name, `country_${c.id}`));
-    await ctx.reply('Выберите страну:', Markup.inlineKeyboard(buttons, { columns: 1 }));
+    await ctx.answerCbQuery().catch(() => {});
+    await ctx.editMessageText(`Страна: ${countryName}`).catch(() => {});
 
+    ctx.session.registration!.country_id = countryId;
+    const ok = await sendDistricts(ctx, countryId);
+    if (!ok) return ctx.scene.leave();
     return ctx.wizard.next();
   },
 
   // 2. Выбор федерального округа
   async (ctx) => {
     if (!ctx.callbackQuery || !('data' in ctx.callbackQuery)) return;
-    await ctx.answerCbQuery().catch(() => {}); // Сразу отвечаем Telegram
+    await ctx.answerCbQuery().catch(() => {});
 
     if (ctx.callbackQuery.data === 'back_to_country') {
-      ctx.wizard.selectStep(1);
-      const { data: countries } = await supabase
-        .from('locations')
-        .select('id, name')
-        .eq('type', 'country')
-        .eq('name', 'Россия');
-      const buttons = (countries || []).map((c: any) =>
-        Markup.button.callback(c.name, `country_${c.id}`),
-      );
-      await ctx.reply('Выберите страну:', Markup.inlineKeyboard(buttons, { columns: 1 }));
-      return;
+      ctx.wizard.selectStep(0);
+      const ok = await sendCountries(ctx);
+      if (!ok) return ctx.scene.leave();
+      return ctx.wizard.next();
     }
 
-    const countryId = ctx.callbackQuery.data.replace('country_', '');
-    ctx.session.registration!.country_id = countryId;
+    const cbQuery = ctx.callbackQuery as any;
+    const districtId = cbQuery.data.replace('district_', '');
+    const districtName = cbQuery.message?.reply_markup?.inline_keyboard
+      ?.flat()
+      .find((b: any) => b.callback_data === cbQuery.data)?.text;
 
-    const { data: districts, error } = await supabase
-      .from('locations')
-      .select('id, name')
-      .eq('parent_id', countryId)
-      .eq('type', 'district');
+    await ctx.editMessageText(`Округ: ${districtName}`).catch(() => {});
 
-    if (error || !districts || districts.length === 0) {
-      await ctx.reply('Ошибка при получении федеральных округов.');
-      return ctx.scene.leave();
-    }
-
-    const buttons = districts.map((d) => Markup.button.callback(d.name, `district_${d.id}`));
-    buttons.push(Markup.button.callback('⬅️ Назад', 'back_to_country'));
-    await ctx.reply('Выберите федеральный округ:', Markup.inlineKeyboard(buttons, { columns: 1 }));
-
+    ctx.session.registration!.district_id = districtId;
+    const ok = await sendRegions(ctx, districtId);
+    if (!ok) return ctx.scene.leave();
     return ctx.wizard.next();
   },
 
   // 3. Выбор региона
   async (ctx) => {
     if (!ctx.callbackQuery || !('data' in ctx.callbackQuery)) return;
-    await ctx.answerCbQuery().catch(() => {}); // Сразу отвечаем Telegram
+    await ctx.answerCbQuery().catch(() => {});
 
     if (ctx.callbackQuery.data === 'back_to_district') {
       const countryId = ctx.session.registration?.country_id;
-      if (!countryId) {
-        ctx.wizard.selectStep(1);
-        return;
-      }
-      const { data: districts } = await supabase
-        .from('locations')
-        .select('id, name')
-        .eq('parent_id', countryId)
-        .eq('type', 'district');
-      const buttons = (districts || []).map((d: any) =>
-        Markup.button.callback(d.name, `district_${d.id}`),
-      );
-      buttons.push(Markup.button.callback('⬅️ Назад', 'back_to_country'));
-      ctx.wizard.selectStep(2);
-      await ctx.reply(
-        'Выберите федеральный округ:',
-        Markup.inlineKeyboard(buttons, { columns: 1 }),
-      );
-      return;
+      if (!countryId) return ctx.scene.leave();
+      ctx.wizard.selectStep(1);
+      const ok = await sendDistricts(ctx, countryId);
+      if (!ok) return ctx.scene.leave();
+      return ctx.wizard.next();
     }
 
-    const districtId = ctx.callbackQuery.data.replace('district_', '');
-    ctx.session.registration!.district_id = districtId;
+    const cbQuery = ctx.callbackQuery as any;
+    const regionId = cbQuery.data.replace('region_', '');
+    const regionName = cbQuery.message?.reply_markup?.inline_keyboard
+      ?.flat()
+      .find((b: any) => b.callback_data === cbQuery.data)?.text;
 
-    const { data: regions, error } = await supabase
-      .from('locations')
-      .select('id, name')
-      .eq('parent_id', districtId)
-      .eq('type', 'region');
+    await ctx.editMessageText(`Регион: ${regionName}`).catch(() => {});
 
-    if (error || !regions || regions.length === 0) {
-      await ctx.reply('Ошибка при получении регионов.');
-      return ctx.scene.leave();
-    }
-
-    const buttons = regions.map((r) => Markup.button.callback(r.name, `region_${r.id}`));
-    buttons.push(Markup.button.callback('⬅️ Назад', 'back_to_district'));
-    await ctx.reply('Выберите регион:', Markup.inlineKeyboard(buttons, { columns: 2 }));
-
-    return ctx.wizard.next();
-  },
-
-  // 4. Ввод ФИО пользователя
-  async (ctx) => {
-    if (!ctx.callbackQuery || !('data' in ctx.callbackQuery)) return;
-    await ctx.answerCbQuery().catch(() => {}); // Сразу отвечаем Telegram
-
-    if (ctx.callbackQuery.data === 'back_to_region') {
-      const districtId = ctx.session.registration?.district_id;
-      if (!districtId) {
-        ctx.wizard.selectStep(2);
-        return;
-      }
-      const { data: regions } = await supabase
-        .from('locations')
-        .select('id, name')
-        .eq('parent_id', districtId)
-        .eq('type', 'region');
-      const buttons = (regions || []).map((r: any) =>
-        Markup.button.callback(r.name, `region_${r.id}`),
-      );
-      buttons.push(Markup.button.callback('⬅️ Назад', 'back_to_district'));
-      ctx.wizard.selectStep(3);
-      await ctx.reply('Выберите регион:', Markup.inlineKeyboard(buttons, { columns: 2 }));
-      return;
-    }
-
-    const regionId = ctx.callbackQuery.data.replace('region_', '');
     ctx.session.registration!.region_id = regionId;
-
-    await ctx.reply('Введите ваше ФИО (полностью):', Markup.keyboard([['⬅️ Назад']]).resize());
+    await ctx.reply('Введите ваш населенный пункт (город/село):', backKeyboard);
     return ctx.wizard.next();
   },
 
-  // 5. Ввод email
-  async (ctx) => {
-    console.log('[Registration Scene] Step 5: Receiving Name');
-    if (!ctx.message || !('text' in ctx.message)) {
-      console.log('[Registration Scene] Step 5: No text message received');
-      return;
-    }
-    if (ctx.message.text.trim() === '⬅️ Назад') {
-      const districtId = ctx.session.registration?.district_id;
-      if (!districtId) {
-        ctx.wizard.selectStep(2);
-        return;
-      }
-      const { data: regions } = await supabase
-        .from('locations')
-        .select('id, name')
-        .eq('parent_id', districtId)
-        .eq('type', 'region');
-      const buttons = (regions || []).map((r: any) =>
-        Markup.button.callback(r.name, `region_${r.id}`),
-      );
-      buttons.push(Markup.button.callback('⬅️ Назад', 'back_to_district'));
-      ctx.wizard.selectStep(3);
-      await ctx.reply('Выберите регион:', Markup.inlineKeyboard(buttons, { columns: 2 }));
-      return;
-    }
-    ctx.session.registration!.full_name = ctx.message.text;
-    console.log(`[Registration Scene] Name saved: ${ctx.message.text}`);
-
-    await ctx.reply('Введите ваш email:', Markup.keyboard([['⬅️ Назад']]).resize());
-    return ctx.wizard.next();
-  },
-
-  // 6. Ввод телефона
+  // 4. Ввод города
   async (ctx) => {
     if (!ctx.message || !('text' in ctx.message)) return;
-    if (ctx.message.text.trim() === '⬅️ Назад') {
-      ctx.wizard.selectStep(4);
-      await ctx.reply('Введите ваше ФИО (полностью):', Markup.keyboard([['⬅️ Назад']]).resize());
-      return;
+    const city = ctx.message.text.trim();
+
+    if (city === '⬅️ Назад') {
+      const districtId = ctx.session.registration?.district_id;
+      if (!districtId) return ctx.scene.leave();
+      ctx.wizard.selectStep(2);
+      const ok = await sendRegions(ctx, districtId);
+      if (!ok) return ctx.scene.leave();
+      return ctx.wizard.next();
     }
-    const email = ctx.message.text.trim().toLowerCase();
-    if (!isValidEmail(email)) {
-      await ctx.reply('Пожалуйста, введите корректный email:');
+
+    ctx.session.registration!.city = city;
+    await ctx.reply('Введите ваше ФИО полностью (три слова через пробел):', backKeyboard);
+    return ctx.wizard.next();
+  },
+
+  // 5. Ввод ФИО
+  async (ctx) => {
+    if (!ctx.message || !('text' in ctx.message)) return;
+    const fullName = ctx.message.text.trim();
+
+    if (fullName === '⬅️ Назад') {
+      ctx.wizard.selectStep(3);
+      await ctx.reply('Введите ваш населенный пункт (город/село):', backKeyboard);
+      return ctx.wizard.next();
+    }
+
+    if (!validators.fullName(fullName)) {
+      await ctx.reply('Пожалуйста, введите ФИО полностью (три слова через пробел):');
       return;
     }
 
-    const userId = ctx.session.supabaseUserId;
-    if (!userId) {
-      await ctx.reply('Ошибка сессии. Пожалуйста, введите /start');
-      return ctx.scene.leave();
+    ctx.session.registration!.full_name = fullName;
+    await ctx.reply('Введите ваш Email:', backKeyboard);
+    return ctx.wizard.next();
+  },
+
+  // 6. Ввод Email
+  async (ctx) => {
+    if (!ctx.message || !('text' in ctx.message)) return;
+    const email = ctx.message.text.trim();
+
+    if (email === '⬅️ Назад') {
+      ctx.wizard.selectStep(4);
+      await ctx.reply('Введите ваше ФИО полностью (три слова через пробел):', backKeyboard);
+      return ctx.wizard.next();
+    }
+
+    if (!validators.email(email)) {
+      await ctx.reply('Пожалуйста, введите корректный Email:');
+      return;
     }
 
     ctx.session.registration!.email = email;
-    await supabase.from('users').update({ email }).eq('id', userId);
+    const userId = ctx.session.supabaseUserId;
+    if (userId) {
+      await supabase.from('users').update({ email }).eq('id', userId);
+    }
 
-    await ctx.reply('Введите ваш номер телефона:', Markup.keyboard([['⬅️ Назад']]).resize());
+    await ctx.reply(
+      'Введите ваш номер телефона (начиная с 8, 11 цифр, без пробелов):',
+      backKeyboard,
+    );
     return ctx.wizard.next();
   },
 
-  // 7. Ввод ФИО тренера
-  async (ctx) => {
-    let phone = '';
-    if (ctx.message && 'text' in ctx.message) {
-      if (ctx.message.text.trim() === '⬅️ Назад') {
-        ctx.wizard.selectStep(5);
-        await ctx.reply('Введите ваш email:', Markup.keyboard([['⬅️ Назад']]).resize());
-        return;
-      }
-      phone = ctx.message.text.trim();
-    } else if (ctx.message && 'contact' in ctx.message) {
-      phone = ctx.message.contact.phone_number;
-    }
-
-    if (!phone || !isValidPhone(phone)) {
-      await ctx.reply('Пожалуйста, введите корректный номер телефона:');
-      return;
-    }
-
-    ctx.session.registration!.phone = normalizePhone(phone);
-    await ctx.reply('Введите ФИО вашего тренера:', Markup.keyboard([['⬅️ Назад']]).resize());
-    return ctx.wizard.next();
-  },
-
-  // 8. Сохранение данных и предложение продолжить
+  // 7. Ввод телефона
   async (ctx) => {
     if (!ctx.message || !('text' in ctx.message)) return;
-    if (ctx.message.text.trim() === '⬅️ Назад') {
-      ctx.wizard.selectStep(6);
-      await ctx.reply('Введите ваш номер телефона:', Markup.keyboard([['⬅️ Назад']]).resize());
+    const phone = ctx.message.text.trim();
+
+    if (phone === '⬅️ Назад') {
+      ctx.wizard.selectStep(5);
+      await ctx.reply('Введите ваш Email:', backKeyboard);
+      return ctx.wizard.next();
+    }
+
+    if (!validators.phone(phone)) {
+      await ctx.reply('Пожалуйста, введите номер телефона корректно (начиная с 8, 11 цифр):');
       return;
     }
+
+    ctx.session.registration!.phone = phone;
+    await ctx.reply('Введите ФИО вашего тренера полностью (три слова через пробел):', backKeyboard);
+    return ctx.wizard.next();
+  },
+
+  // 8. Ввод тренера + сохранение
+  async (ctx) => {
+    if (!ctx.message || !('text' in ctx.message)) return;
     const coachName = ctx.message.text.trim();
-    if (!coachName) {
-      await ctx.reply('Пожалуйста, введите ФИО тренера:');
+
+    if (coachName === '⬅️ Назад') {
+      ctx.wizard.selectStep(6);
+      await ctx.reply(
+        'Введите ваш номер телефона (начиная с 8, 11 цифр, без пробелов):',
+        backKeyboard,
+      );
+      return ctx.wizard.next();
+    }
+
+    if (!validators.fullName(coachName)) {
+      await ctx.reply('Пожалуйста, введите ФИО тренера полностью (три слова через пробел):');
       return;
     }
+
     ctx.session.registration!.coach_name = coachName;
 
     const regData = ctx.session.registration!;
     const userId = ctx.session.supabaseUserId!;
-
     if (!userId) {
       await ctx.reply('Ошибка сессии. Пожалуйста, введите /start');
       return ctx.scene.leave();
@@ -289,21 +279,16 @@ export const firstRegistrationScene = new Scenes.WizardScene<BotContext>(
           user_id: userId,
           full_name: regData.full_name,
           location_id: regData.region_id,
+          city: regData.city,
           phone: regData.phone,
         },
         { onConflict: 'user_id' },
       );
-
       if (profileError) throw profileError;
 
-      const { error: athleteError } = await supabase.from('athletes').upsert(
-        {
-          user_id: userId,
-          coach_name: regData.coach_name,
-        },
-        { onConflict: 'user_id' },
-      );
-
+      const { error: athleteError } = await supabase
+        .from('athletes')
+        .upsert({ user_id: userId, coach_name: regData.coach_name }, { onConflict: 'user_id' });
       if (athleteError) throw athleteError;
 
       await ctx.reply(
@@ -329,14 +314,25 @@ export const firstRegistrationScene = new Scenes.WizardScene<BotContext>(
   // 9. Обработка выбора продолжения
   async (ctx) => {
     if (!ctx.callbackQuery || !('data' in ctx.callbackQuery)) return;
-    const choice = ctx.callbackQuery.data;
+    const cbQuery = ctx.callbackQuery as any;
+    const choice = cbQuery.data as string;
     await ctx.answerCbQuery().catch(() => {});
 
     if (choice === 'back_to_coach') {
       ctx.wizard.selectStep(7);
-      await ctx.reply('Введите ФИО вашего тренера:', Markup.keyboard([['⬅️ Назад']]).resize());
-      return;
+      await ctx.reply(
+        'Введите ФИО вашего тренера полностью (три слова через пробел):',
+        backKeyboard,
+      );
+      return ctx.wizard.next();
     }
+
+    const choiceText = choice === 'continue_passport' ? 'Да, продолжить' : 'Нет, позже';
+    await ctx
+      .editMessageText(
+        `Основные данные сохранены! Желаете заполнить паспортные данные прямо сейчас?\n\nВаш выбор: ${choiceText}`,
+      )
+      .catch(() => {});
 
     if (choice === 'continue_passport') {
       await supabase
