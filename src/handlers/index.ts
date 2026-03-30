@@ -13,6 +13,14 @@ export function setupHandlers(bot: Telegraf<BotContext>) {
 
   const mainMenu = Markup.keyboard([['👤 Профиль', 'Мои заявки'], ['📊 Соревнования']]).resize();
 
+  const escapeHtml = (s: any) =>
+    String(s ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+
   const setMainMenu = async (ctx: BotContext) => {
     try {
       const msg: any = await ctx.reply(' ', mainMenu);
@@ -233,7 +241,7 @@ export function setupHandlers(bot: Telegraf<BotContext>) {
       // Сортируем категории по весу, чтобы они не были вперемешку
       uniqueCategories.sort((a: any, b: any) => a.weight_min - b.weight_min);
 
-      let message = `<b>🏆 ${comp.name}</b>\n\n`;
+      let message = `<b>🏆 ${escapeHtml(comp.name)}</b>\n\n`;
       message += `📅 <b>Начало:</b> ${new Date(comp.start_date).toLocaleDateString('ru-RU')}\n`;
       if (comp.mandate_start_date) {
         const mStart = new Date(comp.mandate_start_date).toLocaleDateString('ru-RU');
@@ -248,10 +256,14 @@ export function setupHandlers(bot: Telegraf<BotContext>) {
       }
 
       if (comp.city) {
-        message += `🏙 <b>Место:</b> г. ${comp.city}`;
-        if (comp.street) message += `, ${comp.street}`;
-        if (comp.house) message += `, д. ${comp.house}`;
+        message += `🏙 <b>Место:</b> г. ${escapeHtml(comp.city)}`;
+        if (comp.street) message += `, ${escapeHtml(comp.street)}`;
+        if (comp.house) message += `, д. ${escapeHtml(comp.house)}`;
         message += `\n`;
+      }
+
+      if ((comp as any).description) {
+        message += `\n<b>📝 Описание:</b>\n${escapeHtml((comp as any).description)}\n`;
       }
 
       message += `\n<b>👥 Категории:</b>\n`;
@@ -288,11 +300,10 @@ export function setupHandlers(bot: Telegraf<BotContext>) {
           await ctx.telegram.deleteMessage(chatId, messageId).catch(() => {});
         }
 
-        await ctx.replyWithPhoto(previewUrl, {
-          caption: message,
-          parse_mode: 'HTML',
-          reply_markup: { inline_keyboard: buttons },
+        await ctx.replyWithPhoto(previewUrl).catch(async () => {
+          await ctx.reply('Превью соревнования недоступно.');
         });
+        await ctx.replyWithHTML(message, { reply_markup: { inline_keyboard: buttons } });
         return;
       }
 
