@@ -343,63 +343,20 @@ export const firstRegistrationScene = new Scenes.WizardScene<BotContext>(
         .upsert({ user_id: userId, coach_name: regData.coach_name }, { onConflict: 'user_id' });
       if (athleteError) throw athleteError;
 
-      await ctx.reply(
-        'Основные данные сохранены! Желаете заполнить паспортные данные прямо сейчас?',
-        {
-          reply_markup: {
-            inline_keyboard: [
-              [{ text: 'Да, продолжить', callback_data: 'continue_passport' }],
-              [{ text: 'Нет, позже', callback_data: 'skip_passport' }],
-              [{ text: '⬅️ Назад', callback_data: 'back_to_coach' }],
-            ],
-          },
-        },
-      );
-      return ctx.wizard.next();
-    } catch (err) {
-      console.error('[Registration Scene] Save error:', err);
-      await ctx.reply('Произошла ошибка при сохранении данных.');
-      return ctx.scene.leave();
-    }
-  },
-
-  // 9. Обработка выбора продолжения
-  async (ctx) => {
-    if (!ctx.callbackQuery || !('data' in ctx.callbackQuery)) return;
-    const cbQuery = ctx.callbackQuery as any;
-    const choice = cbQuery.data as string;
-    await ctx.answerCbQuery().catch(() => {});
-
-    if (choice === 'back_to_coach') {
-      ctx.wizard.selectStep(7);
-      await promptCoach(ctx);
-      return;
-    }
-
-    const choiceText = choice === 'continue_passport' ? 'Да, продолжить' : 'Нет, позже';
-    await ctx
-      .editMessageText(
-        `Основные данные сохранены! Желаете заполнить паспортные данные прямо сейчас?\n\nВаш выбор: ${choiceText}`,
-      )
-      .catch(() => {});
-
-    if (choice === 'continue_passport') {
       await supabase
         .from('registrations')
         .upsert(
           { user_id: ctx.session.supabaseUserId, stage: 'passport' },
           { onConflict: 'user_id' },
         );
-      await ctx.scene.enter('passport');
-      return;
-    }
 
-    await supabase
-      .from('registrations')
-      .upsert({ user_id: ctx.session.supabaseUserId, stage: 'first' }, { onConflict: 'user_id' });
-    await ctx.reply(
-      'Хорошо! Вы сможете заполнить паспортные данные позже, нажав кнопку в меню /start.',
-    );
-    await ctx.scene.leave();
+      await ctx.reply('Основные данные сохранены. Переходим к заполнению паспортных данных.');
+      await ctx.scene.enter('passport');
+      return ctx.scene.leave();
+    } catch (err) {
+      console.error('[Registration Scene] Save error:', err);
+      await ctx.reply('Произошла ошибка при сохранении данных.');
+      return ctx.scene.leave();
+    }
   },
 );
