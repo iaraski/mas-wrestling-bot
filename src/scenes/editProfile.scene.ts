@@ -39,7 +39,7 @@ export const editProfileScene = new Scenes.WizardScene<BotContext>(
     await ctx.answerCbQuery();
 
     if (action === 'cancel_edit') {
-      await ctx.editMessageText('Редактирование отменено.').catch(() => {});
+      await ctx.deleteMessage().catch(() => {});
       return ctx.scene.leave();
     }
 
@@ -62,9 +62,10 @@ export const editProfileScene = new Scenes.WizardScene<BotContext>(
       edit_city: 'Введите новый населенный пункт (город/село):',
     };
 
-    await ctx.reply(prompts[action], Markup.inlineKeyboard([
-      [Markup.button.callback('❌ Отмена', 'cancel_input')]
-    ]));
+    await ctx.reply(
+      prompts[action],
+      Markup.inlineKeyboard([[Markup.button.callback('❌ Отмена', 'cancel_input')]]),
+    );
     return ctx.wizard.next();
   },
 
@@ -73,7 +74,7 @@ export const editProfileScene = new Scenes.WizardScene<BotContext>(
     if (ctx.callbackQuery && 'data' in ctx.callbackQuery) {
       if ((ctx.callbackQuery as any).data === 'cancel_input') {
         await ctx.answerCbQuery();
-        await ctx.editMessageText('Редактирование отменено.').catch(() => {});
+        await ctx.deleteMessage().catch(() => {});
         return ctx.scene.leave();
       }
     }
