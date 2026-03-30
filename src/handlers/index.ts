@@ -255,20 +255,22 @@ export function setupHandlers(bot: Telegraf<BotContext>) {
       }
 
       message += `\n<b>👥 Категории:</b>\n`;
+      message += `• Юноши и девушки (14-15 лет) 2011-2012 г.р.\n`;
+      message += `• Юноши и девушки (16-17 лет) 2009-2010 г.р.\n`;
+      message += `• Юниоры и юниорки (18-21 год) 2005-2008 г.р.\n`;
 
-      uniqueCategories.forEach((cat: any) => {
-        let weightStr = '';
-        if (cat.weight_max === 999) {
-          weightStr = `${Math.floor(cat.weight_min)}+`;
-        } else {
-          weightStr = cat.weight_max ? `до ${cat.weight_max}` : `свыше ${cat.weight_min}`;
-        }
-
-        message += `• ${cat.gender === 'male' ? 'М' : 'Ж'}, ${cat.age_min}-${cat.age_max} лет, ${weightStr} кг\n`;
-      });
+      const isRussiaChamp2026 =
+        typeof comp.name === 'string' &&
+        comp.name.toLowerCase().includes('первенств') &&
+        comp.name.includes('2026');
 
       const buttons = [
-        [{ text: '📝 Подать заявку', callback_data: `apply_comp_${comp.id}` }],
+        [
+          {
+            text: isRussiaChamp2026 ? '📝 Подать заявку на Первенство России 2026' : '📝 Подать заявку',
+            callback_data: `apply_comp_${comp.id}`,
+          },
+        ],
         [{ text: '⬅️ Назад к списку', callback_data: 'back_to_comps' }],
       ];
 
