@@ -241,6 +241,11 @@ export function setupHandlers(bot: Telegraf<BotContext>) {
       // Сортируем категории по весу, чтобы они не были вперемешку
       uniqueCategories.sort((a: any, b: any) => a.weight_min - b.weight_min);
 
+      const isRussiaChamp2026 =
+        typeof comp.name === 'string' &&
+        comp.name.toLowerCase().includes('первенств') &&
+        comp.name.includes('2026');
+
       let message = `<b>🏆 ${escapeHtml(comp.name)}</b>\n\n`;
       message += `📅 <b>Начало:</b> ${new Date(comp.start_date).toLocaleDateString('ru-RU')}\n`;
       if (comp.mandate_start_date) {
@@ -255,7 +260,10 @@ export function setupHandlers(bot: Telegraf<BotContext>) {
         message += `🔲 <b>Количество помостов:</b> ${comp.mats_count}\n`;
       }
 
-      if (comp.city) {
+      const pr2026Address = (process.env.PR2026_ADDRESS || '').trim();
+      if (isRussiaChamp2026 && pr2026Address) {
+        message += `🏙 <b>Место:</b> ${escapeHtml(pr2026Address)}\n`;
+      } else if (comp.city) {
         message += `🏙 <b>Место:</b> г. ${escapeHtml(comp.city)}`;
         if (comp.street) message += `, ${escapeHtml(comp.street)}`;
         if (comp.house) message += `, д. ${escapeHtml(comp.house)}`;
@@ -271,15 +279,12 @@ export function setupHandlers(bot: Telegraf<BotContext>) {
       message += `• Юноши и девушки (16-17 лет) 2009-2010 г.р.\n`;
       message += `• Юниоры и юниорки (18-21 год) 2005-2008 г.р.\n`;
 
-      const isRussiaChamp2026 =
-        typeof comp.name === 'string' &&
-        comp.name.toLowerCase().includes('первенств') &&
-        comp.name.includes('2026');
-
       const buttons = [
         [
           {
-            text: isRussiaChamp2026 ? '📝 Подать заявку на Первенство России 2026' : '📝 Подать заявку',
+            text: isRussiaChamp2026
+              ? '📝 Подать заявку на Первенство России 2026'
+              : '📝 Подать заявку',
             callback_data: `apply_comp_${comp.id}`,
           },
         ],
@@ -307,7 +312,10 @@ export function setupHandlers(bot: Telegraf<BotContext>) {
         return;
       }
 
-      await ctx.editMessageText(message, { parse_mode: 'HTML', reply_markup: { inline_keyboard: buttons } });
+      await ctx.editMessageText(message, {
+        parse_mode: 'HTML',
+        reply_markup: { inline_keyboard: buttons },
+      });
     } catch (err) {
       console.error('Error fetching competition info:', err);
       await ctx.reply('Ошибка при получении информации о соревновании.');
