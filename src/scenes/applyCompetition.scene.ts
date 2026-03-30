@@ -11,6 +11,13 @@ export const applyCompetitionScene = new Scenes.WizardScene<BotContext>(
     if (!compId) return ctx.scene.leave();
 
     try {
+      const { data: comp } = await supabase
+        .from('competitions')
+        .select('name')
+        .eq('id', compId)
+        .maybeSingle();
+      (ctx.wizard.state as any).compName = comp?.name;
+
       // Получаем данные спортсмена и его паспорт
       const { data: athlete, error: athleteError } = await supabase
         .from('athletes')
@@ -143,6 +150,15 @@ export const applyCompetitionScene = new Scenes.WizardScene<BotContext>(
         await ctx.reply(
           '✅ Ваша заявка успешно подана! Ожидайте подтверждения участия организаторами.',
         );
+
+        const compName = String((ctx.wizard.state as any).compName || '');
+        const isRussiaChamp2026 =
+          compName.toLowerCase().includes('первенств') && compName.includes('2026');
+        if (isRussiaChamp2026) {
+          await ctx.reply(
+            'Мандатная комиссия пройдет 24 апреля и начнется с верификации паспорта спортсмена (ваших загруженных данных).\nТолько после этого вы будете допущены к взвешиванию.',
+          );
+        }
       }
     } catch (err) {
       console.error('Save application error:', err);
