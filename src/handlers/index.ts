@@ -4,10 +4,12 @@ import { BotContext } from '../types/session';
 import { checkUserStage } from '../utils/user';
 
 export function setupHandlers(bot: Telegraf<BotContext>) {
+  const consentUrl =
+    'https://docs.google.com/document/d/1pkV6DiFigJ_jG-zkH_fsXpr-KgGu-2ibxIC9gNvJv-Y/edit?usp=sharing';
   const consentText =
     'Добро пожаловать в онлайн систему мас-рестлинга.\n' +
-    'Перед началом регистрации вашего личного кабинета, пожалуйста подтвердите согласие на обработку персональных данных.\n' +
-    'https://docs.google.com/document/d/1pkV6DiFigJ_jG-zkH_fsXpr-KgGu-2ibxIC9gNvJv-Y/edit?usp=sharing';
+    'Перед началом регистрации вашего личного кабинета, пожалуйста подтвердите ' +
+    `<a href="${consentUrl}">согласие на обработку персональных данных</a>.`;
 
   const mainMenu = Markup.keyboard([['👤 Профиль', 'Мои заявки'], ['📊 Соревнования']]).resize();
 
@@ -43,18 +45,16 @@ export function setupHandlers(bot: Telegraf<BotContext>) {
 
     if (error) {
       console.error('[Consent] Error reading consent_accepted:', error);
-      await ctx.reply(
-        consentText,
-        Markup.inlineKeyboard([[{ text: 'Подтверждаю', callback_data: 'consent_accept' }]]),
-      );
+      await ctx.replyWithHTML(consentText, {
+        ...Markup.inlineKeyboard([[{ text: 'Подтверждаю', callback_data: 'consent_accept' }]]),
+      });
       return false;
     }
 
     if (!data?.consent_accepted) {
-      await ctx.reply(
-        consentText,
-        Markup.inlineKeyboard([[{ text: 'Подтверждаю', callback_data: 'consent_accept' }]]),
-      );
+      await ctx.replyWithHTML(consentText, {
+        ...Markup.inlineKeyboard([[{ text: 'Подтверждаю', callback_data: 'consent_accept' }]]),
+      });
       return false;
     }
 
