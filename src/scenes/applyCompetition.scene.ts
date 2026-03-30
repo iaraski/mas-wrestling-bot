@@ -83,6 +83,7 @@ export const applyCompetitionScene = new Scenes.WizardScene<BotContext>(
         return [Markup.button.callback(label, `select_cat_${cat.id}`)];
       });
 
+      buttons.push([Markup.button.callback('⬅️ Назад', 'apply_back')]);
       await ctx.reply('Выберите вашу весовую категорию:', Markup.inlineKeyboard(buttons));
       return ctx.wizard.next();
     } catch (err) {
@@ -95,12 +96,35 @@ export const applyCompetitionScene = new Scenes.WizardScene<BotContext>(
   // 2. Подтверждение и сохранение заявки
   async (ctx) => {
     if (!ctx.callbackQuery || !('data' in ctx.callbackQuery)) return;
-    const catId = (ctx.callbackQuery as any).data.replace('select_cat_', '');
+    const data = String((ctx.callbackQuery as any).data);
     await ctx.answerCbQuery();
 
     const { athleteId, compId } = ctx.wizard.state as any;
 
     try {
+      if (data === 'apply_back') {
+        await ctx.editMessageReplyMarkup(undefined).catch(() => {});
+        await ctx.editMessageText('Отмена подачи заявки.').catch(() => {});
+
+        const { data: competitions } = await supabase
+          .from('competitions')
+          .select('*')
+          .gte('end_date', new Date().toISOString())
+          .order('start_date', { ascending: true });
+
+        if (!competitions || competitions.length === 0) {
+          await ctx.reply('На данный момент нет активных соревнований.');
+          return ctx.scene.leave();
+        }
+
+        const buttons = competitions.map((c) => [
+          Markup.button.callback(c.name, `comp_info_${c.id}`),
+        ]);
+        await ctx.reply('Выберите соревнование:', Markup.inlineKeyboard(buttons));
+        return ctx.scene.leave();
+      }
+
+      const catId = data.replace('select_cat_', '');
       const { error } = await supabase.from('applications').insert({
         competition_id: compId,
         athlete_id: athleteId,
