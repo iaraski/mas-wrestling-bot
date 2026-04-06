@@ -2,6 +2,43 @@ import { Markup, Scenes } from 'telegraf';
 import { supabase } from '../supabase';
 import { BotContext } from '../types/session';
 
+const formatCategoryGroup = (gender: any, ageMin: any, ageMax: any) => {
+  const g = String(gender ?? '').toLowerCase();
+  const isMale = g === 'male' || g === 'm';
+  const isFemale = g === 'female' || g === 'f';
+  const aMin = typeof ageMin === 'number' ? ageMin : Number(ageMin);
+  const aMax = typeof ageMax === 'number' ? ageMax : Number(ageMax);
+  if (aMin === 18 && aMax === 21) return isMale ? 'Юниоры' : isFemale ? 'Юниорки' : 'Юниоры';
+  if (Number.isFinite(aMax) && aMax < 18) return isMale ? 'Юноши' : isFemale ? 'Девушки' : 'Юноши';
+  return isMale ? 'Мужчины' : isFemale ? 'Женщины' : 'Мужчины';
+};
+
+const formatWeightLabel = (weightMin: any, weightMax: any) => {
+  const max = weightMax == null ? null : Number(weightMax);
+  const min = weightMin == null ? 0 : Number(weightMin);
+  if (max == null || max >= 999) {
+    if (!min) return 'абсолютная';
+    return `${Math.floor(min)}+ кг`;
+  }
+  return `до ${max} кг`;
+};
+
+const formatBirthYears = (ageMin: any, ageMax: any, atDate: any) => {
+  const aMin = typeof ageMin === 'number' ? ageMin : Number(ageMin);
+  const aMax = typeof ageMax === 'number' ? ageMax : Number(ageMax);
+  const d = atDate ? new Date(atDate) : new Date();
+  const year = Number.isFinite(d.getTime()) ? d.getFullYear() : new Date().getFullYear();
+  if (!Number.isFinite(aMin) || !Number.isFinite(aMax)) return '';
+  return `${year - aMax}-${year - aMin} г.р.`;
+};
+
+const formatCategoryLabel = (cat: any, competitionStartDate?: any) => {
+  const group = formatCategoryGroup(cat?.gender, cat?.age_min, cat?.age_max);
+  const years = formatBirthYears(cat?.age_min, cat?.age_max, competitionStartDate);
+  const weight = formatWeightLabel(cat?.weight_min, cat?.weight_max);
+  return years ? `${group} ${years}, ${weight}` : `${group}, ${weight}`;
+};
+
 export const applyCompetitionScene = new Scenes.WizardScene<BotContext>(
   'apply-competition',
 
@@ -13,10 +50,11 @@ export const applyCompetitionScene = new Scenes.WizardScene<BotContext>(
     try {
       const { data: comp } = await supabase
         .from('competitions')
-        .select('name')
+        .select('name,start_date')
         .eq('id', compId)
         .maybeSingle();
       (ctx.wizard.state as any).compName = comp?.name;
+      (ctx.wizard.state as any).compStartDate = comp?.start_date;
 
       // Получаем данные спортсмена и его паспорт
       const { data: athlete, error: athleteError } = await supabase
@@ -75,14 +113,8 @@ export const applyCompetitionScene = new Scenes.WizardScene<BotContext>(
       (ctx.wizard.state as any).categories = uniqueCategories;
 
       const buttons = uniqueCategories.map((cat: any) => {
-        let weightLabel = '';
-        if (cat.weight_max === 999) {
-          weightLabel = `${Math.floor(cat.weight_min)}+ кг`;
-        } else {
-          weightLabel = cat.weight_max ? `до ${cat.weight_max} кг` : `свыше ${cat.weight_min} кг`;
-        }
-
-        let label = weightLabel;
+        const startDate = (ctx.wizard.state as any).compStartDate;
+        let label = formatCategoryLabel(cat, startDate);
         if (cat.competition_day) {
           label += ` (${new Date(cat.competition_day).toLocaleDateString('ru-RU')})`;
         }

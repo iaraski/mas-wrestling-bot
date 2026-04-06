@@ -21,6 +21,44 @@ export function setupHandlers(bot: Telegraf<BotContext>) {
       .replace(/"/g, '&quot;')
       .replace(/'/g, '&#39;');
 
+  const formatCategoryGroup = (gender: any, ageMin: any, ageMax: any) => {
+    const g = String(gender ?? '').toLowerCase();
+    const isMale = g === 'male' || g === 'm';
+    const isFemale = g === 'female' || g === 'f';
+    const aMin = typeof ageMin === 'number' ? ageMin : Number(ageMin);
+    const aMax = typeof ageMax === 'number' ? ageMax : Number(ageMax);
+    if (aMin === 18 && aMax === 21) return isMale ? 'Юниоры' : isFemale ? 'Юниорки' : 'Юниоры';
+    if (Number.isFinite(aMax) && aMax < 18)
+      return isMale ? 'Юноши' : isFemale ? 'Девушки' : 'Юноши';
+    return isMale ? 'Мужчины' : isFemale ? 'Женщины' : 'Мужчины';
+  };
+
+  const formatWeightLabel = (weightMin: any, weightMax: any) => {
+    const max = weightMax == null ? null : Number(weightMax);
+    const min = weightMin == null ? 0 : Number(weightMin);
+    if (max == null || max >= 999) {
+      if (!min) return 'абсолютная';
+      return `${Math.floor(min)}+ кг`;
+    }
+    return `до ${max} кг`;
+  };
+
+  const formatBirthYears = (ageMin: any, ageMax: any, atDate: any) => {
+    const aMin = typeof ageMin === 'number' ? ageMin : Number(ageMin);
+    const aMax = typeof ageMax === 'number' ? ageMax : Number(ageMax);
+    const d = atDate ? new Date(atDate) : new Date();
+    const year = Number.isFinite(d.getTime()) ? d.getFullYear() : new Date().getFullYear();
+    if (!Number.isFinite(aMin) || !Number.isFinite(aMax)) return '';
+    return `${year - aMax}-${year - aMin} г.р.`;
+  };
+
+  const formatCategoryLabel = (cat: any, competitionStartDate?: any) => {
+    const group = formatCategoryGroup(cat?.gender, cat?.age_min, cat?.age_max);
+    const years = formatBirthYears(cat?.age_min, cat?.age_max, competitionStartDate);
+    const weight = formatWeightLabel(cat?.weight_min, cat?.weight_max);
+    return years ? `${group} ${years}, ${weight}` : `${group}, ${weight}`;
+  };
+
   const setMainMenu = async (ctx: BotContext) => {
     try {
       const msg: any = await ctx.reply(' ', mainMenu);
@@ -279,9 +317,9 @@ export function setupHandlers(bot: Telegraf<BotContext>) {
       }
 
       message += `\n<b>👥 Категории:</b>\n`;
-      message += `• Юноши и девушки (14-15 лет) 2011-2012 г.р.\n`;
-      message += `• Юноши и девушки (16-17 лет) 2009-2010 г.р.\n`;
-      message += `• Юниоры и юниорки (18-21 год) 2005-2008 г.р.\n`;
+      uniqueCategories.forEach((c: any) => {
+        message += `• ${escapeHtml(formatCategoryLabel(c, comp.start_date))}\n`;
+      });
 
       const buttons = [
         [
@@ -294,27 +332,6 @@ export function setupHandlers(bot: Telegraf<BotContext>) {
         ],
         [{ text: '⬅️ Назад к списку', callback_data: 'back_to_comps' }],
       ];
-
-      const previewUrl =
-        (comp as any).preview_url ||
-        (comp as any).poster_url ||
-        (comp as any).image_url ||
-        (comp as any).cover_url ||
-        (comp as any).banner_url;
-
-      if (previewUrl && typeof previewUrl === 'string') {
-        const chatId = ctx.chat?.id;
-        const messageId = (ctx.callbackQuery as any)?.message?.message_id;
-        if (chatId && messageId) {
-          await ctx.telegram.deleteMessage(chatId, messageId).catch(() => {});
-        }
-
-        await ctx.replyWithPhoto(previewUrl).catch(async () => {
-          await ctx.reply('Превью соревнования недоступно.');
-        });
-        await ctx.replyWithHTML(message, { reply_markup: { inline_keyboard: buttons } });
-        return;
-      }
 
       await ctx.editMessageText(message, {
         parse_mode: 'HTML',
@@ -425,15 +442,7 @@ export function setupHandlers(bot: Telegraf<BotContext>) {
       applications.forEach((app: any, index: number) => {
         const comp = app.competitions;
         const cat = app.competition_categories;
-
-        let weightStr = '';
-        if (cat.weight_max === 999) {
-          weightStr = `${Math.floor(cat.weight_min)}+ кг`;
-        } else {
-          weightStr = cat.weight_max ? `до ${cat.weight_max} кг` : `свыше ${cat.weight_min} кг`;
-        }
-
-        const catStr = `${cat.gender === 'male' ? 'М' : 'Ж'}, ${cat.age_min}-${cat.age_max} лет, ${weightStr}`;
+        const catStr = formatCategoryLabel(cat, comp?.start_date);
 
         message += `<b>${index + 1}. ${comp.name}</b>\n`;
         message += `Категория: ${catStr}\n`;
