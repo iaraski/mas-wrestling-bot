@@ -75,7 +75,10 @@ export const applyCompetitionScene = new Scenes.WizardScene<BotContext>(
       const passport = athlete.passports as any;
       const birthDate = new Date(passport.birth_date);
       const gender = passport.gender;
-      const age = new Date().getFullYear() - birthDate.getFullYear();
+      const startDate = (ctx.wizard.state as any).compStartDate;
+      const at = startDate ? new Date(startDate) : new Date();
+      const year = Number.isFinite(at.getTime()) ? at.getFullYear() : new Date().getFullYear();
+      const age = year - birthDate.getFullYear();
 
       console.log(`[Apply Scene] Athlete: ${athlete.id}, Age: ${age}, Gender: ${gender}`);
 

@@ -21,6 +21,20 @@ export function setupHandlers(bot: Telegraf<BotContext>) {
       .replace(/"/g, '&quot;')
       .replace(/'/g, '&#39;');
 
+  const apiBaseUrl = String(
+    process.env.API_BASE_URL || 'https://api.mas-wrestling.pro/api/v1',
+  ).replace(/\/+$/, '');
+
+  const getCompetitionResults = async (competitionId: string) => {
+    const url = `${apiBaseUrl}/live/competitions/${competitionId}/results`;
+    const resp = await fetch(url, { method: 'GET' });
+    if (!resp.ok) {
+      const text = await resp.text().catch(() => '');
+      throw new Error(`HTTP ${resp.status}: ${text || resp.statusText}`);
+    }
+    return (await resp.json()) as any;
+  };
+
   const formatCategoryGroup = (gender: any, ageMin: any, ageMax: any) => {
     const g = String(gender ?? '').toLowerCase();
     const isMale = g === 'male' || g === 'm';
@@ -330,6 +344,7 @@ export function setupHandlers(bot: Telegraf<BotContext>) {
             callback_data: `apply_comp_${comp.id}`,
           },
         ],
+        [{ text: '🏅 Победители', callback_data: `comp_results_${comp.id}` }],
         [{ text: '⬅️ Назад к списку', callback_data: 'back_to_comps' }],
       ];
 
@@ -340,6 +355,60 @@ export function setupHandlers(bot: Telegraf<BotContext>) {
     } catch (err) {
       console.error('Error fetching competition info:', err);
       await ctx.reply('Ошибка при получении информации о соревновании.');
+    }
+  });
+
+  bot.action(/^comp_results_(.+)$/, async (ctx) => {
+    const compId = ctx.match[1];
+    await ctx.answerCbQuery().catch(() => {});
+
+    try {
+      const results = await getCompetitionResults(String(compId));
+      const compName = escapeHtml(results?.competition?.name || 'Соревнование');
+      const isFinished = Boolean(results?.competition?.is_finished);
+
+      const champions: any[] = Array.isArray(results?.champions) ? results.champions : [];
+      const categories: any[] = Array.isArray(results?.categories) ? results.categories : [];
+
+      if (!isFinished) {
+        await ctx.replyWithHTML(
+          `<b>🏆 ${compName}</b>\n\nИтоги будут доступны после завершения всех поединков.`,
+        );
+        return;
+      }
+
+      let message = `<b>🏆 Итоги соревнования</b>\n${compName}\n\n`;
+
+      if (champions.length) {
+        message += `<b>🥇 Чемпионы (общий список):</b>\n`;
+        for (const c of champions) {
+          const catLabel = escapeHtml(c?.category_label || c?.category_id || '');
+          const athleteName = escapeHtml(c?.name || '');
+          message += `• ${catLabel}: <b>${athleteName || '—'}</b>\n`;
+        }
+      } else {
+        message += `<b>🥇 Чемпионы:</b>\nПока нет данных.\n`;
+      }
+
+      const finishedCats = categories.filter((c) => c?.is_finished && Array.isArray(c?.winners));
+      if (finishedCats.length) {
+        message += `\n<b>🏅 Призёры по категориям:</b>\n`;
+        for (const cat of finishedCats) {
+          const label = escapeHtml(cat?.label || cat?.category_id || '');
+          message += `\n<b>${label}</b>\n`;
+          for (const w of cat.winners as any[]) {
+            const place = Number(w?.place) || 0;
+            const name = escapeHtml(w?.name || '');
+            if (!place) continue;
+            message += `${place}) ${name || '—'}\n`;
+          }
+        }
+      }
+
+      await ctx.replyWithHTML(message);
+    } catch (err) {
+      console.error('Error fetching competition results:', err);
+      await ctx.reply('Ошибка при получении списка победителей.');
     }
   });
 
