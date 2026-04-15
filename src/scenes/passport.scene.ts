@@ -71,8 +71,6 @@ export const passportScene = new Scenes.WizardScene<BotContext>(
 
   // 0. Серия
   async (ctx) => {
-    ctx.session.passport = {} as PassportData;
-
     if (!ctx.session.supabaseUserId) {
       const { data: user } = await supabase
         .from('users')
@@ -86,9 +84,13 @@ export const passportScene = new Scenes.WizardScene<BotContext>(
         return ctx.scene.leave();
       }
     }
-
-    await promptSeries(ctx);
-    return ctx.wizard.next();
+    if (ctx.session.supabaseUserId) {
+      await supabase
+        .from('registrations')
+        .upsert({ user_id: ctx.session.supabaseUserId, stage: 'first' }, { onConflict: 'user_id' });
+    }
+    await ctx.reply('Паспортные данные заполняются администратором/секретарём.');
+    return ctx.scene.leave();
   },
 
   // 1. Номер

@@ -346,12 +346,14 @@ export const firstRegistrationScene = new Scenes.WizardScene<BotContext>(
       await supabase
         .from('registrations')
         .upsert(
-          { user_id: ctx.session.supabaseUserId, stage: 'passport' },
+          { user_id: ctx.session.supabaseUserId, stage: 'first' },
           { onConflict: 'user_id' },
         );
 
-      await ctx.scene.enter('passport');
-      return;
+      await ctx.reply(
+        '✅ Основные данные сохранены.\n\nПаспортные данные заполняются администратором/секретарём. Вы можете подавать заявку на соревнование в разделе «Соревнования».',
+      );
+      return ctx.scene.leave();
     } catch (err) {
       console.error('[Registration Scene] Save error:', err);
       await ctx.reply('Произошла ошибка при сохранении данных.');

@@ -151,22 +151,20 @@ export function setupHandlers(bot: Telegraf<BotContext>) {
 
     if (currentStage === 'start') {
       await ctx.reply(
-        'Для подачи заявки на Первенство России по мас-рестлингу, пожалуйста пройдите регистрацию. ВАЖНО! Данные заполняются как в паспорте!',
+        'Для подачи заявки на соревнования, пожалуйста пройдите регистрацию.',
         Markup.inlineKeyboard([[{ text: 'Начать регистрацию', callback_data: 'register' }]]),
       );
       await setMainMenu(ctx);
     } else if (currentStage === 'first') {
       await ctx.reply(
-        'Вы заполнили основные данные. Теперь необходимо внести паспортные данные спортсмена.',
-        Markup.inlineKeyboard([[{ text: 'Заполнить паспорт', callback_data: 'register' }]]),
+        'Вы успешно зарегистрированы.\n\nПаспортные данные заполняются администратором/секретарём.',
+        mainMenu,
       );
-      await setMainMenu(ctx);
     } else if (currentStage === 'passport') {
       await ctx.reply(
-        'Вам необходимо заполнить паспортные данные.',
-        Markup.inlineKeyboard([[{ text: 'Заполнить паспорт', callback_data: 'passport' }]]),
+        'Паспортные данные заполняются администратором/секретарём.',
+        mainMenu,
       );
-      await setMainMenu(ctx);
     } else if (currentStage === 'complete') {
       await ctx.reply('Вы успешно зарегистрированы!', mainMenu);
     }
@@ -218,22 +216,20 @@ export function setupHandlers(bot: Telegraf<BotContext>) {
 
     if (currentStage === 'start') {
       await ctx.reply(
-        'Для подачи заявки на Первенство России по мас-рестлингу, пожалуйста пройдите регистрацию. ВАЖНО! Данные заполняются как в паспорте!',
+        'Для подачи заявки на соревнования, пожалуйста пройдите регистрацию.',
         Markup.inlineKeyboard([[{ text: 'Начать регистрацию', callback_data: 'register' }]]),
       );
       await setMainMenu(ctx);
     } else if (currentStage === 'first') {
       await ctx.reply(
-        'Вы заполнили основные данные. Теперь необходимо внести паспортные данные спортсмена.',
-        Markup.inlineKeyboard([[{ text: 'Заполнить паспорт', callback_data: 'register' }]]),
+        'Вы успешно зарегистрированы.\n\nПаспортные данные заполняются администратором/секретарём.',
+        mainMenu,
       );
-      await setMainMenu(ctx);
     } else if (currentStage === 'passport') {
       await ctx.reply(
-        'Вам необходимо заполнить паспортные данные.',
-        Markup.inlineKeyboard([[{ text: 'Заполнить паспорт', callback_data: 'passport' }]]),
+        'Паспортные данные заполняются администратором/секретарём.',
+        mainMenu,
       );
-      await setMainMenu(ctx);
     } else if (currentStage === 'complete') {
       await ctx.reply('Вы успешно зарегистрированы!', mainMenu);
     }
@@ -692,10 +688,10 @@ export function setupHandlers(bot: Telegraf<BotContext>) {
     await ctx.answerCbQuery().catch(console.error);
     try {
       const currentStage = await checkUserStage(ctx);
-      if (currentStage === 'first') {
-        await ctx.scene.enter('passport');
-      } else {
+      if (currentStage === 'start') {
         await ctx.scene.enter('first-registration');
+      } else {
+        await ctx.reply('Регистрация уже пройдена. Паспортные данные заполняются администратором/секретарём.', mainMenu);
       }
     } catch (e) {
       console.error('Error in register action:', e);
@@ -705,7 +701,7 @@ export function setupHandlers(bot: Telegraf<BotContext>) {
 
   bot.action('passport', async (ctx) => {
     await ctx.answerCbQuery();
-    await ctx.scene.enter('passport');
+    await ctx.reply('Паспортные данные заполняются администратором/секретарём.', mainMenu);
   });
 
   bot.action('apply', async (ctx) => {

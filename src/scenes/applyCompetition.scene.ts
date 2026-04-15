@@ -56,7 +56,7 @@ export const applyCompetitionScene = new Scenes.WizardScene<BotContext>(
       (ctx.wizard.state as any).compName = comp?.name;
       (ctx.wizard.state as any).compStartDate = comp?.start_date;
 
-      // Получаем данные спортсмена и его паспорт
+      // Получаем данные спортсмена и его паспорт (паспорт может быть не заполнен)
       const { data: athlete, error: athleteError } = await supabase
         .from('athletes')
         .select('id, passports(birth_date, gender)')
@@ -65,32 +65,38 @@ export const applyCompetitionScene = new Scenes.WizardScene<BotContext>(
 
       if (athleteError) throw athleteError;
 
-      if (!athlete || !athlete.passports) {
-        await ctx.reply(
-          'Ошибка: данные паспорта не найдены. Пожалуйста, заполните профиль полностью.',
-        );
+      if (!athlete) {
+        await ctx.reply('Ошибка: спортсмен не найден. Пожалуйста, пройдите регистрацию.');
         return ctx.scene.leave();
       }
 
-      const passport = athlete.passports as any;
-      const birthDate = new Date(passport.birth_date);
-      const gender = passport.gender;
+      const passport = (athlete as any).passports as any;
+      const birthDate = passport?.birth_date ? new Date(passport.birth_date) : null;
+      const gender = passport?.gender ? String(passport.gender) : null;
       const startDate = (ctx.wizard.state as any).compStartDate;
       const at = startDate ? new Date(startDate) : new Date();
       const year = Number.isFinite(at.getTime()) ? at.getFullYear() : new Date().getFullYear();
-      const age = year - birthDate.getFullYear();
+      const age = birthDate && Number.isFinite(birthDate.getTime()) ? year - birthDate.getFullYear() : null;
 
-      console.log(`[Apply Scene] Athlete: ${athlete.id}, Age: ${age}, Gender: ${gender}`);
+      if (age == null || !gender) {
+        await ctx.reply(
+          'Паспортные данные (дата рождения/пол) заполняются администратором/секретарём. Пока вы можете выбрать категорию вручную.',
+        );
+      }
 
       // Ищем подходящие категории и сортируем их по весу
-      const { data: categories, error: catError } = await supabase
+      let catsQuery = supabase
         .from('competition_categories')
         .select('*')
         .eq('competition_id', compId)
-        .eq('gender', gender)
-        .lte('age_min', age)
-        .gte('age_max', age)
         .order('weight_min', { ascending: true });
+      if (gender) {
+        catsQuery = catsQuery.eq('gender', gender);
+      }
+      if (typeof age === 'number') {
+        catsQuery = catsQuery.lte('age_min', age).gte('age_max', age);
+      }
+      const { data: categories, error: catError } = await catsQuery;
 
       if (catError) throw catError;
 
