@@ -2,6 +2,8 @@ import { Markup, Scenes } from 'telegraf';
 import { supabase } from '../supabase';
 import { BotContext } from '../types/session';
 
+const APPLICATION_DEADLINE = new Date('2026-04-23T00:00:00+03:00');
+
 const formatCategoryGroup = (gender: any, ageMin: any, ageMax: any) => {
   const g = String(gender ?? '').toLowerCase();
   const isMale = g === 'male' || g === 'm';
@@ -44,6 +46,10 @@ export const applyCompetitionScene = new Scenes.WizardScene<BotContext>(
 
   // 1. Показываем доступные категории для этого соревнования
   async (ctx) => {
+    if (new Date() >= APPLICATION_DEADLINE) {
+      await ctx.reply('Подача заявок закрыта (после 22 апреля 23:59).');
+      return ctx.scene.leave();
+    }
     const compId = (ctx.scene.state as any).competitionId;
     if (!compId) return ctx.scene.leave();
 
@@ -146,6 +152,11 @@ export const applyCompetitionScene = new Scenes.WizardScene<BotContext>(
     if (!ctx.callbackQuery || !('data' in ctx.callbackQuery)) return;
     const data = String((ctx.callbackQuery as any).data);
     await ctx.answerCbQuery();
+
+    if (new Date() >= APPLICATION_DEADLINE) {
+      await ctx.reply('Подача заявок закрыта (после 22 апреля 23:59).');
+      return ctx.scene.leave();
+    }
 
     const { athleteId, compId } = ctx.wizard.state as any;
 
