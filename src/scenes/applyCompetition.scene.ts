@@ -2,7 +2,7 @@ import { Markup, Scenes } from 'telegraf';
 import { supabase } from '../supabase';
 import { BotContext } from '../types/session';
 
-const APPLICATION_DEADLINE = new Date('2026-04-23T00:00:00+03:00');
+const APPLICATION_DEADLINE = new Date('2026-04-24T19:00:00+03:00');
 
 const formatCategoryGroup = (gender: any, ageMin: any, ageMax: any) => {
   const g = String(gender ?? '').toLowerCase();
